@@ -5,3 +5,7 @@
 	path = cores/MiSTer/GameboyColor
 	url = https://github.com/jrmoserbaltimore/Gameboy_MiSTer.git
 	branch = msretro
+[submodule "tv80"]
+	path = cores/MiSTer/brNX-tv80
+	url = https://github.com/jrmoserbaltimore/Gameboy_MiSTer.git
+	branch = tv80
