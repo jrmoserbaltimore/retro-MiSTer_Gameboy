@@ -1,0 +1,7 @@
+[submodule "retro-sys"]
+	path = retro
+	url = https://github.com/jrmoserbaltimore/retro-1.git
+[submodule "gbcore"]
+	path = cores/MiSTer/GameboyColor
+	url = https://github.com/jrmoserbaltimore/Gameboy_MiSTer.git
+	branch = msretro
