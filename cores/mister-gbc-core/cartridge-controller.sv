@@ -10,15 +10,16 @@ module GBCCartridgeController
 (
     logic Clk,
     logic ClkEn,
-    // Communication to main system.  System can call for boot from ROM, 
+    // Communication to main system.  System can call for boot from ROM, and controller can call
+    // for save states and save RAM.
     IRetroComm.Target Comm,
     // Pass these to the mapper module, which will use the  
     IRetroMemoryPort.Initiator LoadImage,
-    RetroBRAM.Initiator ROMCache,
+    IRetroMemoryPort.Initiator ROMCache,
 
     // RAM for memory map
-    RetroBRAM.Initiator SystemRAM, // Gameboy system RAM
-    RetroBRAM.Initiator VideoRAM,
+    IRetroMemoryPort.Initiator SystemRAM, // Gameboy system RAM
+    IRetroMemoryPort.Initiator VideoRAM,
 
     // Physical cartridge
     IGBCGamePak.Controller GamePak,

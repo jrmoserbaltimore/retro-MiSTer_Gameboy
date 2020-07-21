@@ -1,62 +1,7 @@
 // vim: sw=4 ts=4 et
-// Example RetroCoreShim.  The shim sets up for an actual core, creating RAM objects, mapping the
+// Game Boy Color Shim.  The shim sets up for an actual core, creating RAM objects, mapping the
 // expansion port (e.g. to a cartridge), exposing the controller properly to the core, managing
 // CATC, handling cache, and so forth.
-//
-// Each core will require individualized RAM creation and mapping.  Multi-core systems will
-// consume enormous amounts of BRAM if instantiated concurrently.  A multi-core configuration must
-// implement its own shim to allocate these resources to whatever system is running.
-
-// Example GamePak interface
-interface IGBCGamePak
-(
-);
-    logic Clk;
-    logic Write;
-    logic Read;
-    logic CS;
-    logic Address [15:0];
-    logic DataIn [7:0];
-    logic DataOut [7:0];
-    logic Reset;
-    logic Audio;
-
-    modport Controller
-    (
-        output Clk,
-        output Write,
-        output Read,
-        output CS,
-        output Address,
-        input DataIn,
-        output DataOut,
-        output Reset,
-        input Audio
-    );
-endinterface
-
-interface IGBCGamePakBus
-(
-
-);
-    logic CS;
-    logic Reset;
-    logic Audio;
-    
-    modport Controller
-    (
-        input CS,
-        input Reset,
-        output Audio
-    );
-    
-    modport GameBoy
-    (
-        output CS,
-        output Reset,
-        input Audio
-    );
-endinterface
 
 // This is the core shim.  RetroConosle connects everything to this, which then connects to the
 // core module.  In here we set up various types of RAM, clock control, the cartridge controller,
@@ -66,12 +11,14 @@ module RetroCoreShim
     parameter string DeviceType = "Xilinx"
 )
 (
-    // The console sends a core system clock (e.g. 200MHz) and a clock-enable
-    // to produce the console's reference clock.
+    // The console sends a core system clock (e.g. 200MHz) and a clock-enable to produce the
+    // console's reference clock.
     input logic CoreClock, // Core system clock
     input logic ClkEn,
 
-    // DDR System RAM or other large
+    // DDR System RAM or other large RAM.
+    // MainRAM should be DMA/IOMMU controlled, and the host must indicate the location of the load
+    // image. 
     RetroMemoryPort.Initiator MainRAM,
     // DDR, HyperRAM, or SRAM on the expansion bus
     RetroMemoryPort.Initiator ExpansionRAM0,
@@ -228,7 +175,7 @@ module RetroCoreShim
 endmodule
 
 // Core module:  Abstract to clock/CE, RAM elements, AV, cartridge, peripherals.
-// Might make sense to abstract the cartridge address/data buses as a memory port.
+// Cartridge controler acts as the whole CPU memory bus.
 module RetroMisterGBCCore
 (
     input Clk,
