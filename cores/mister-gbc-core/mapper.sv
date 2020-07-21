@@ -5,7 +5,8 @@
 // hundred cycles or on eviction.  This writeback triggers a message indicating what RAM has
 // changed.  The host then can copy RAM into a save RAM file or a PITR history.  
 //
-// FIXME:  Set up method to indicate game has battery-backed RAM and of what size
+// FIXME:  Set up method to indicate game has battery-backed RAM and of what size.
+// FIXME:  HuC1 might be worth implementing
 module GBCMapper
 (
     input logic Clk,
@@ -44,8 +45,6 @@ module GBCMapper
     
     logic BankingMode = '0; // MBC1 $6000-$7FFF
     
-    logic RAMWriteEnabled = '0;
-    
     logic [8:0] ROMBankMask = '0;
 
     logic [4:0][7:0] RTCRegisters;
@@ -59,7 +58,7 @@ module GBCMapper
     uwire HasRumble;
     uwire HasSensor;
     
-    logic RamEnabled = '0;
+    logic RAMEnabled = '0;
     //logic TimerEnabled = '0;
     logic FlashEnabled = '0;
     logic FlashWriteEnabled = '0;
@@ -70,7 +69,6 @@ module GBCMapper
     // $0147:  Mapper type
     // $0148:  ROM size (layout)
     
-    // Type 00 gives a 32Kbyte ROM and 8K RAM
     // ========================================================
     // = Determine mapper, ram, battery, and other attributes =
     // ========================================================
@@ -225,10 +223,8 @@ module GBCMapper
     // ===================
     // MBC3 has a real-time clock mappable into its RAM bank.
     // As with the ROM bank, just do good house keeping when setting registers.
-    //
-    // Controller should never send address higher than $BFFF to the mapper.
     always_comb
-    if (ClkEn && MemoryBus.Access && MemoryBus.Address >= 'hA000 && RamEnabled)
+    if (ClkEn && MemoryBus.Access && MemoryBus.Address >= 'ha000 && MemoryBus.Address < 'hc000)
     begin
         if (MapperType >= ROM && MapperType <= MBC5)
         begin
@@ -254,8 +250,9 @@ module GBCMapper
                     CartridgeRAM.Address[16:13] = '0;
                 else
                     CartridgeRAM.Address[16:13] = RAMBankID[3:0];
-                CartridgeRAM.Access = MemoryBus.Access;
-                CartridgeRAM.Write = MemoryBus.Write & RAMWriteEnabled;
+                MemoryBus.Dout = RAMEnabled ? CartridgeRAM.Din : '0;
+                CartridgeRAM.Access = MemoryBus.Access & RAMEnabled;
+                CartridgeRAM.Write = MemoryBus.Write & RAMEnabled;
             end
         end
         else
@@ -266,9 +263,9 @@ module GBCMapper
     end
 
     always_ff @(posedge Clk)
-    if (ClkEn && MemoryBus.Access && MemoryBus.Address >= 'hA000)
+    if (ClkEn && MemoryBus.Access && MemoryBus.Address >= 'ha000 && MemoryBus.Address < 'hc000)
     begin
-        if (MapperType == MBC3 && HasTimer && RAMBankID[3] && RamEnabled)
+        if (MapperType == MBC3 && HasTimer && RAMBankID[3] && RAMEnabled)
         begin
             // Write to the registers
             if (MemoryBus.Write)
@@ -311,7 +308,7 @@ module GBCMapper
             begin
                 //$0000-$1FFF   RAM enable              MBC1, MBC2, MBC3, MBC5
                 //              Timer enable            MBC3
-                RamEnabled <= (MemoryBus.Din[3:0] == 'ha);
+                RAMEnabled <= (MemoryBus.Din[3:0] == 'ha);
             end
             else if (MemoryBus.Address >= 'h2000 && MemoryBus.Address <= 'h3fff)
             begin
@@ -363,6 +360,5 @@ module GBCMapper
             //$3000-$37FF   ROM/Flash bank B        MBC6
             //$3800-$3FFF   ROM/Flash bank B select MBC6
         end
-
     end
 endmodule
