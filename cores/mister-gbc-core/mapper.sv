@@ -35,12 +35,14 @@ module GBCMapper
         HuC1=12
     } MapperTypes;
 
+    
     // The header indicates how many ROM and RAM banks the cartridge has, which also determines
     // mapper behavior.
     logic [8:0] ROMBankID; // Up to 512 16K banks
     logic [3:0] RAMBankID; // Up to 16 Cartridge RAM banks, or MBC3 RTC register indexes
     
-    logic [8:0] ROMSize; // Up to 512 banks
+    // ROM size packed to 4 bits ('b0101 is the only upper nibble, so just truncate)
+    logic [3:0] ROMSize;
     logic [3:0] RAMSize; 
     
     logic BankingMode = '0; // MBC1 $6000-$7FFF
@@ -50,13 +52,14 @@ module GBCMapper
     logic [4:0][7:0] RTCRegisters;
     logic RTCLatched = '0;
 
-    logic [7:0] CartridgeType;
+    logic [5:0] CartridgeType; // Skip bits 7-6
     logic [3:0] MapperType;
     logic HasRam;
     logic HasBattery;
-    uwire HasTimer;
-    uwire HasRumble;
-    uwire HasSensor;
+    logic HasTimer;
+    logic HasRumble;
+    logic HasSensor;
+    uwire TimerAccess;
     
     logic RAMEnabled = '0;
     //logic TimerEnabled = '0;
@@ -72,56 +75,77 @@ module GBCMapper
     // ========================================================
     // = Determine mapper, ram, battery, and other attributes =
     // ========================================================
-    assign HasTimer = (CartridgeType == 'h0f || CartridgeType == 'h10);
-    assign HasRumble = ((CartridgeType >= 'h1c && CartridgeType <= 'h1e) || HasSensor);
-    assign HasSensor = (MapperType == MBC7);
+    // These are combinational but may take longer than a tick. Inputs only change when loading a
+    // new load image, so the initialization process needs to delay long enough after changing
+    // CartridgeType.
     always_comb
     begin
         case (CartridgeType)
             'h00,
             'h08,
             'h09:
-                MapperType = ROM;
+                MapperType <= ROM;
             'h01,
             'h02,
             'h03:
-                MapperType = MBC1;
+                MapperType <= MBC1;
             'h05,
             'h06:
-                MapperType = MBC2;
+                MapperType <= MBC2;
             'h0b,
             'h0c,
             'h0d:
-                MapperType = MMM01;
+                MapperType <= MMM01;
             'h0f,
-            'h10,
+            'h10:
+                begin
+                    HasTimer <= '1;
+                    MapperType <= MBC3;
+                end
             'h11,
             'h12,
             'h13:
-                MapperType = MBC3;
+                begin
+                    HasTimer <= '0;
+                    MapperType <= MBC3;
+                end
             'h19,
             'h1a,
-            'h1b,
+            'h1b:
+                begin
+                    HasRumble <= '1;
+                    MapperType <= MBC5;
+                end
             'h1c,
             'h1d,
             'h1e:
-                MapperType = MBC5;
+                begin
+                    HasRumble <= '0;
+                    MapperType <= MBC5;
+                end
             'h20:
-                MapperType = MBC6;
+                MapperType <= MBC6;
             'h22:
-                MapperType = MBC7;
-            'hfc:
-                MapperType = Camera;
-            'hfd:
-                MapperType = TAMA5;
-            'hfe:
-                MapperType = HuC3;
-            'hff:
-                MapperType = HuC1;
+                begin
+                    HasSensor <= 0;
+                    MapperType <= MBC7;
+                end
+            'h3c: // 'hfc without the top 2 bits
+                MapperType <= Camera;
+            'h3d:
+                MapperType <= TAMA5;
+            'h3e:
+                MapperType <= HuC3;
+            'h3f:
+                MapperType <= HuC1;
             default:
-                MapperType = '0;
+                // We don't care about sensor, rumble, or timer here
+                MapperType <= '0;
         endcase
-
+    end
+    
+    always_comb
+    begin
         case (CartridgeType)
             'h02,
             'h08,
@@ -130,14 +154,14 @@ module GBCMapper
             'h1a,
             'h1d:
                 begin
-                    HasRam = '1;
-                    HasBattery = '0;
+                    HasRam <= '1;
+                    HasBattery <= '0;
                 end
             'h06,
             'h0f:
                 begin
-                    HasRam = '0;
-                    HasBattery = '1;
+                    HasRam <= '0;
+                    HasBattery <= '1;
                 end
             'h03,
             'h09,
@@ -147,15 +171,15 @@ module GBCMapper
             'h1b,
             'h1e,
             'h22,
-            'hff:
+            'h3f: // 'hff without the top 2 bits
                 begin
-                    HasRam = '1;
-                    HasBattery = '1;
+                    HasRam <= '1;
+                    HasBattery <= '1;
                 end
             default:
                 begin
-                    HasRam = '0;
-                    HasBattery = '0;
+                    HasRam <= '0;
+                    HasBattery <= '0;
                 end
         endcase
     end
@@ -163,26 +187,39 @@ module GBCMapper
     // =================
     // = ROM bank read =
     // =================
-    always_comb
-    if (ClkEn && MemoryBus.Access && !MemoryBus.Write && MemoryBus.Address < 'h8000)
-    begin
-        CartridgeRAM.Access = '0;
-        CartridgeRAM.Write = '0;
-        if (MapperType >= ROM && MapperType <= MBC5)
-        begin
-            LoadImage.Access = MemoryBus.Access;
-            LoadImage.Write = '0;
+    
+    // Never write to ROM
+    assign LoadImage.Write = '0;
 
+    always_comb
+    begin
+        // Set the ROM bank mask using the count of 16KiB ROM banks.
+        if (ROMSize[3:2] == 'b11) // The special 11xx = '52h '53h '54h between 64 and 128 banks
+            ROMBankMask = 128 - 1;
+        else
+            ROMBankMask = (2 << ROMSize) - 1;
+    end
+
+    // This continuously sets the address at which to access LoadImage, but doesn't necessarily
+    // access it.
+    always_comb
+    begin
+    if (MapperType >= ROM && MapperType <= MBC5)
+        begin
             LoadImage.Address[13:0] = MemoryBus.Address[13:0];
-            if (MemoryBus.Address <= 'h4000)
+            if (MemoryBus.Address[15:14] == 'b00) //< 'h4000)
             begin
                 LoadImage.Address[18:14] = '0;
                 // MBC1 can remap bank 0 in advanced banking on large ROMs; it uses the RAM bank ID
                 // XXX:  This doesn't work with MBC1m (multi-cart), which map the RAM bank bits to
                 // bits 4-5 instead of 5-6
-                LoadImage.Address[20:19] =
-                        (MapperType == MBC1 && ROMSize >= 64 && BankingMode == '1) ? RAMBankID[1:0]
-                        : '0; // non-MBC1
+                LoadImage.Address[20:19] = (
+                                            MapperType == MBC1 &&
+                                            'h8 >= ROMSize && ROMSize >= 'h5 &&
+                                            BankingMode == '1
+                                           )
+                                           ? RAMBankID[1:0] // MBC1 weird mode-1 stuff
+                                           : '0; // non-MBC1
                 LoadImage.Address[22:21] = '0; // Blank
             end
             else
@@ -192,101 +229,96 @@ module GBCMapper
                 begin
                     // XXX:  Again:  does not work with MBC1m
                     LoadImage.Address[18:14] = (ROMBankID[4:0] == '0) ? '1 : ROMBankID[4:0];
-                    LoadImage.Address[20:19] = (ROMSize >= 64) ? RAMBankID[1:0] : '0;
+                    LoadImage.Address[20:19] = ('h8 >= ROMSize && ROMSize >= 'h5)
+                                               ? RAMBankID[1:0]
+                                               : '0;
                     LoadImage.Address[22:21] = '0;
                 end
                 else
                 begin
-                LoadImage.Address[22:14] =
-                        (ROMBankID[3:0] == '0 && MapperType == MBC2) ? '1
+                LoadImage.Address[22:14] = (ROMBankID[3:0] == '0 && MapperType == MBC2)
+                        ? '1
                         : ROMBankID[8:0];
                 end
             end
         end
-        else
-        begin
-            // Mappers beyond MBC5 are highly specialized and not supported.
-            // MBC6 is only one game; MBC7 has accelerometers.
-            // HuC1 used IR COMM, Pokemon TCG used this
-            LoadImage.Access = '0;
-            LoadImage.Write = '0;
-        end
+        // Mappers beyond MBC5 are highly specialized and not supported.
+        // MBC6 is only one game; MBC7 has accelerometers.
+        // HuC1 used IR COMM, Pokemon TCG used this
     end
-    else
-    begin
-            LoadImage.Access = '0;
-            LoadImage.Write = '0;
-    end
-
+    
     // ===================
     // = RAM bank access =
     // ===================
     // MBC3 has a real-time clock mappable into its RAM bank.
     // As with the ROM bank, just do good house keeping when setting registers.
+    
+    assign TimerAccess = HasTimer && RAMBankID[3];
+    assign CartridgeRAM.Access = MemoryBus.Access && (MemoryBus.Address[15:13] == 'b101)
+                                 && RAMEnabled && !TimerAccess;
+    assign CartridgeRAM.Write  = MemoryBus.Write && CartridgeRAM.Access;
+    assign CartridgeRAM.Dout = MemoryBus.Din; // Is this ever not true?
+    assign CartridgeRAM.Address[12:0] = MemoryBus.Address[12:0];
+    
     always_comb
-    if (ClkEn && MemoryBus.Access && MemoryBus.Address >= 'ha000 && MemoryBus.Address < 'hc000)
+    // 5 inputs to minimize resource usage
+    if (
+        //ClkEn &&
+        !TimerAccess &&
+        MemoryBus.Access &&
+        // MemoryBus.Address >= 'ha000 && MemoryBus.Address < 'hc000
+        MemoryBus.Address[15:13] == 'b101 // Cartridge RAM range
+       )
     begin
         if (MapperType >= ROM && MapperType <= MBC5)
         begin
             LoadImage.Access = '0;
             LoadImage.Write = '0;
-            CartridgeRAM.Address[12:0] = MemoryBus.Address[12:0];
 
-            if (MapperType == MBC3 && HasTimer && RAMBankID[3])
-            begin
-                // Do not access the cartridge RAM
-                CartridgeRAM.Access = '0;
-                CartridgeRAM.Write = '0;
-                // Write to the registers XXX:  Delete? 
-                //if (MemoryBus.Write)
-                //    RTCRegisters[RAMBankID[2:0]] = MemoryBus.Din;
-                //else
-                //    MemoryBus.Dout = RTCRegisters[RAMBankID[2:0]];
-            end
+            // MBC1 doesn't bank RAM if banking mode is 0, RAM is small, or ROM is large.
+            if (MapperType == MBC1 && (BankingMode == '0 || RAMSize < 'h2 || ('h8 >= ROMSize && ROMSize >= 'h5)))
+                CartridgeRAM.Address[16:13] = 4'b0;
             else
-            begin
-                // MBC1 doesn't bank RAM if banking mode is 0, RAM is small, or ROM is large.
-                if (MapperType == MBC1 && (BankingMode == '0 || RAMSize < 'h2 || ROMSize >= 64))
-                    CartridgeRAM.Address[16:13] = '0;
-                else
-                    CartridgeRAM.Address[16:13] = RAMBankID[3:0];
-                MemoryBus.Dout = RAMEnabled ? CartridgeRAM.Din : '0;
-                CartridgeRAM.Access = MemoryBus.Access & RAMEnabled;
-                CartridgeRAM.Write = MemoryBus.Write & RAMEnabled;
-            end
+                CartridgeRAM.Address[16:13] = RAMBankID[3:0];
         end
+        if (TimerAccess)
+            MemoryBus.Dout = RTCRegisters[RAMBankID[2:0]];
         else
-        begin
-            CartridgeRAM.Access = '0;
-            CartridgeRAM.Write = '0;
-        end
+            MemoryBus.Dout = RAMEnabled ? CartridgeRAM.Din : '0;
     end
 
+    // Set the timer registers on clock tick
+    // FIXME:  Need to latch the registers when appropriate
+    // FIXME:  When setting the clock, store the offset from the real RTC
     always_ff @(posedge Clk)
-    if (ClkEn && MemoryBus.Access && MemoryBus.Address >= 'ha000 && MemoryBus.Address < 'hc000)
+    if (ClkEn && TimerAccess && MemoryBus.Access && MemoryBus.Address[15:13] == 'b101) // Cartridge RAM range
     begin
-        if (MapperType == MBC3 && HasTimer && RAMBankID[3] && RAMEnabled)
+        if (RAMEnabled)
         begin
             // Write to the registers
             if (MemoryBus.Write)
                 RTCRegisters[RAMBankID[2:0]] <= MemoryBus.Din;
-            else
-                MemoryBus.Dout <= RTCRegisters[RAMBankID[2:0]];
+            //else
+            //    MemoryBus.Dout <= RTCRegisters[RAMBankID[2:0]];
         end
     end
+    
+    // Set the bus to access
+    // Only ROM and CRAM area are valid
+    always_comb
+    //if (MemoryBus.Access && !MemoryBus.Write && MemoryBus.Address[15] == '0) //< 'h8000)
+    if (MemoryBus.Address[15] == '0) //< 'h8000) // ROM
+    begin
+        MemoryBus.Dout = LoadImage.Dout;
+    end else //if (MemoryBus.Address[15:13] == 'b101) // Cartridge RAM range
+    begin
+        MemoryBus.Dout = CartridgeRAM.Din;
+    end
+
     // ==========================
     // = Mapper register access =
     // ==========================
-    
-    always_comb
-    begin
-        // Set the ROM bank mask
-        if (ROMSize > 64 && ROMSize < 128)
-            ROMBankMask = 128 - 1;
-        else
-            ROMBankMask = ROMSize - 1;
-    end
-    
+
     always_ff @(posedge Clk)
     if (ClkEn && MemoryBus.Access && MemoryBus.Write && MemoryBus.Address < 'h8000)
     begin
@@ -302,7 +334,7 @@ module GBCMapper
             // about which action to take for which mapper.  These mappers support different sizes
             // of ROM and RAM.
             if (
-                MemoryBus.Address >= 'h0000 && MemoryBus.Address <= 'h1fff
+                'h1fff >= MemoryBus.Address && MemoryBus.Address >= 'h0000
                 && !(MapperType == MBC2 && !MemoryBus.Address[8]) // MBC2 is special
                )
             begin
@@ -310,7 +342,7 @@ module GBCMapper
                 //              Timer enable            MBC3
                 RAMEnabled <= (MemoryBus.Din[3:0] == 'ha);
             end
-            else if (MemoryBus.Address >= 'h2000 && MemoryBus.Address <= 'h3fff)
+            else if ('h3fff >= MemoryBus.Address && MemoryBus.Address >= 'h2000)
             begin
                 //$2000-$3FFF   ROM Bank number         MBC1, MBC2, MBC3
                 //$2000-$2FFF   ROM Bank low bits       MBC5
@@ -323,7 +355,7 @@ module GBCMapper
                 end
                 else if (MapperType == MBC5)
                 begin
-                    ROMBankID[8] <= MemoryBus.Din[0] & ROMBankMask[8];
+                    ROMBankID <= {MemoryBus.Din[0] & ROMBankMask[8], ROMBankID[7:0]};
                 end
             end
             else if (MemoryBus.Address >= 'h4000 && MemoryBus.Address <= 'h5fff)
