@@ -326,7 +326,7 @@ module GBCMapper
     // MBC3 has a real-time clock mappable into its RAM bank.
     // As with the ROM bank, just do good house keeping when setting registers.
     
-    assign TimerAccess = HasTimer && RAMBankID[3] && RAMEnabled;
+    assign TimerAccess = HasTimer && RAMBankID[3] && MemoryBus.Access && RAMEnabled;
     assign CartridgeRAM.Access = MemoryBus.Access && (MemoryBus.Address[15:13] == 'b101)
                                  && RAMEnabled && !TimerAccess;
     assign CartridgeRAM.Write  = MemoryBus.Write && CartridgeRAM.Access;
@@ -335,10 +335,7 @@ module GBCMapper
     assign CartridgeRAM.Mask = '0;
 
     always_comb
-    // 5 inputs to minimize resource usage
     if (
-        //ClkEn &&
-        //!TimerAccess &&
         MemoryBus.Access &&
         // MemoryBus.Address >= 'ha000 && MemoryBus.Address < 'hc000
         MemoryBus.Address[15:13] == 'b101 // Cartridge RAM range
@@ -360,13 +357,10 @@ module GBCMapper
     // FIXME:  Need to latch the registers when appropriate
     // FIXME:  When setting the clock, store the offset from the real RTC
     always_ff @(posedge Clk)
-    if (ClkEn && TimerAccess && MemoryBus.Access && MemoryBus.Address[15:13] == 'b101) // Cartridge RAM range
+    if (ClkEn && TimerAccess && MemoryBus.Write && MemoryBus.Address[15:13] == 'b101) // Cartridge RAM range
     begin
-        if (RAMEnabled && MemoryBus.Write)
-        begin
-            // Write to the timer registers
-            RTCRegisters[RAMBankID[2:0]] <= MemoryBus.DToInitiator;
-        end
+        // Write to the timer registers
+        RTCRegisters[RAMBankID[2:0]] <= MemoryBus.DToInitiator;
     end
     
     // Set the bus to access
