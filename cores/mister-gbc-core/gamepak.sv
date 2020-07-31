@@ -9,8 +9,8 @@ interface IGBCGamePak
     logic Read;
     logic CS;
     logic Address [15:0];
-    logic DataIn [7:0];
-    logic DataOut [7:0];
+    logic DFromPak [7:0];
+    logic DToPak [7:0];
     logic Reset;
     logic Audio;
 
@@ -21,8 +21,8 @@ interface IGBCGamePak
         output Read,
         output CS,
         output Address,
-        input DataIn,
-        output DataOut,
+        input DFromPak,
+        output DToPak,
         output Reset,
         input Audio
     );

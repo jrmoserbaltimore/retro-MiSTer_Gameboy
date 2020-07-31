@@ -8,13 +8,13 @@
 // and any peripherals.
 module RetroCoreShim
 #(
-    parameter string DeviceType = "Xilinx"
+    parameter string DeviceType = "Xilinx",
+    parameter int CoreClock = 200000000 // 200MHz FPGA core clock
 )
 (
     // The console sends a core system clock (e.g. 200MHz) and a clock-enable to produce the
     // console's reference clock.
-    input logic CoreClock, // Core system clock
-    input logic ClkEn,
+    input logic CoreClk, // Core system clock
 
     // DDR System RAM or other large RAM.
     // MainRAM should be DMA/IOMMU controlled, and the host must indicate the location of the load
@@ -48,19 +48,19 @@ module RetroCoreShim
     RetroComm.Target Console
 );
 
-    uwire Delay;
-    uwire Reset;
-    uwire Ce;
+    wire Delay;
+    wire Reset;
+    wire Ce;
     
-    uwire Read, Write;
-    uwire [15:0] Address;
-    uwire [7:0] DataIn, DataOut;
-    uwire AudioIn;
-    uwire CS, Ready, DataReady;
+    wire Read, Write;
+    wire [15:0] Address;
+    wire [7:0] DataIn, DataOut;
+    wire AudioIn;
+    wire CS, Ready, DataReady;
 
-    uwire CartDelay;
-    uwire MainRAMDelay;
-    uwire VRAMDelay;
+    wire CartDelay;
+    wire MainRAMDelay;
+    wire VRAMDelay;
     
     // The cartridge controller needs to always provide both Ready and DataReady unless waiting
     // for operations.  These may frequently fall between clock ticks.  When using a hardware
@@ -72,17 +72,37 @@ module RetroCoreShim
     // ======================
     // We create BRAMs in the shim so a different shim can use the GBC Cartridge Controller without
     // dedicating the BRAM exclusively to the GBC when not running.
-    RetroBRAM
+    IRetroMemoryPort
     #(
         .AddressBusWidth(15),
-        .DeviceType(DeviceType)
-    ) GBSystemRAM;
+        .DataBusWidth(1) 
+    ) IGBSystemRAM;
 
     RetroBRAM
     #(
         .AddressBusWidth(15),
+        .DataBusWidth(1),
         .DeviceType(DeviceType)
-    ) GBVideoRAM;
+    ) GBSystemRAM
+    (
+        .Initiator(IGBSystemRAM.Target)
+    );
+
+    IRetroMemoryPort
+    #(
+        .AddressBusWidth(14),
+        .DataBusWidth(1) 
+    ) IGBVideoRAM;
+
+    RetroBRAM
+    #(
+        .AddressBusWidth(14),
+        .DataBusWidth(1),
+        .DeviceType(DeviceType)
+    ) GBVideoRAM
+    (
+        .Initiator(IGBVideoRAM.Target)
+    );
     // TODO:  Chunk of BRAM for cartridge cache
     // TODO:  Chunk of BRAM for mappers
 
@@ -114,24 +134,14 @@ module RetroCoreShim
     );
 
     // ========================
-    // = Interface to GameBoy =
+    // = Interface to GamePak =
     // ========================
     IRetroMemoryPort
     #(
         .AddressBusWidth(16),
         .DataBusWidth(1)
     )
-    GamePakFrontend
-    (
-        .Clk(CoreClk),
-        .Address(Address),
-        .DInitiator(DataIn),
-        .DTarget(DataOut),
-        .Access(Read),
-        .Write(Write),
-        .Ready(Ready),
-        .DataReady(DataReady)
-    );
+    GamePakFrontend;
 
     IGBCGamePakBus GamePakBus
     (
@@ -143,21 +153,30 @@ module RetroCoreShim
     // Cartridge Controller is either pass-through or storage + mappers
     GBCCartridgeController CartridgeController
     (
-        // .Clk(CoreClk), // FIXME:  How do we handle clocks and clock domains?
-        .ClkEn(Ce), // Note:  Operations fetching/caching virtual cart must continue regardless
-        
-        // System and video BRAMs
-        .SystemRAM(GBSystemRAM),
-        .VideoRAM(GBVideoRAM),
+        .Clk(CoreClk),
+        .ClkEn(Ce),
+
+        // FIXME:  COMM
+        // FIXME:  Mapper
 
         // Example:  Physical GamePak
         .GamePak(GamePak.Controller),
+
         // GamePak virtual interface for core
         .MemoryBus(GamePakFrontend.Target),
         .GamePakBus(GamePakBus.Controller)
     );
     
-    // 
+    GBCMemoryBus SystemBus
+    (
+        .Clk(CoreClk),
+        .ClkEn(Ce),
+        // System and video BRAMs
+        .SystemRAM(IGBSystemRAM.Initiator),
+        .VideoRAM(IGBVideoRAM.Initiator), // FIXME:  VRAM module must ignore system RAM stuff when accosted during PPU access
+        .Cartridge(GamePakFrontend.Initiator)
+    );
+    /*
     RetroMyCore TheCore
     (
         .Clk(CoreClk),
@@ -172,6 +191,7 @@ module RetroCoreShim
         .SD(0),
         .SerialClk(0)
     );
+    */
 endmodule
 
 // Core module:  Abstract to clock/CE, RAM elements, AV, cartridge, peripherals.
@@ -202,4 +222,11 @@ module RetroMisterGBCCore
     output logic SerialClk
 );
 
+    // TODO:
+    //   - Cartridge controller (with mapper behind it, ROM, CRAM; 0x0000-0xBFFF)
+    //   - Memory bus (peel vram stuff out of cartridge controller)
+    //   - VRAM controller (accessed by memory bus and direct through PPU, not simultaneously)
+    //     - If CPU attempts to access VRAM and OAM while not in mode 0, 1, or 2:
+    //       - ignore writes
+    //       - return 'hff for reads 
 endmodule
