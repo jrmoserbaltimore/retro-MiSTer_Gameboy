@@ -202,41 +202,49 @@ module GBCMapper
 
     // This continuously sets the address at which to access LoadImage, but doesn't necessarily
     // access it.
+    assign LoadImage.Address[13:0] = MemoryBus.Address[13:0];
     always_comb
     begin
     if (MapperType >= ROM && MapperType <= MBC5)
         begin
-            LoadImage.Address[13:0] = MemoryBus.Address[13:0];
             if (MemoryBus.Address[15:14] == 'b00) //< 'h4000)
             begin
-                LoadImage.Address[18:14] = '0;
                 // MBC1 can remap bank 0 in advanced banking on large ROMs; it uses the RAM bank ID
                 // XXX:  This doesn't work with MBC1m (multi-cart), which map the RAM bank bits to
                 // bits 4-5 instead of 5-6
-                LoadImage.Address[20:19] = (
-                                            MapperType == MBC1 &&
-                                            'h8 >= ROMSize && ROMSize >= 'h5 &&
-                                            BankingMode == '1
-                                           )
-                                           ? RAMBankID[1:0] // MBC1 weird mode-1 stuff
-                                           : '0; // non-MBC1
-                LoadImage.Address[22:21] = '0; // Blank
+                LoadImage.Address[22:14] =
+                                            {2'b0, // 22:21 Blank
+                                             ( // 20:19
+                                              MapperType == MBC1 &&
+                                              'h8 >= ROMSize && ROMSize >= 'h5 &&
+                                              BankingMode == '1
+                                             )
+                                             ? RAMBankID[1:0] // MBC1 weird mode-1 stuff
+                                             : '0, // non-MBC1
+                                             6'b0 // 18:14
+                                            };
             end
             else
             begin
                 // Upper ROM bank
                 if (MapperType == MBC1)
                 begin
+                    LoadImage.Address[22:14] = 
+                                                {
+                                                 2'b0, // 22:21
+                                                 ('h8 >= ROMSize && ROMSize >= 'h5)
+                                                 ? RAMBankID[1:0]
+                                                 : '0, // 20:19
                     // XXX:  Again:  does not work with MBC1m
-                    LoadImage.Address[18:14] = (ROMBankID[4:0] == '0) ? '1 : ROMBankID[4:0];
-                    LoadImage.Address[20:19] = ('h8 >= ROMSize && ROMSize >= 'h5)
-                                               ? RAMBankID[1:0]
-                                               : '0;
-                    LoadImage.Address[22:21] = '0;
+                                                 (ROMBankID[4:0] == '0)
+                                                 ? '1
+                                                 : ROMBankID[4:0] // 18:14
+                                                };
                 end
                 else
                 begin
-                LoadImage.Address[22:14] = (ROMBankID[3:0] == '0 && MapperType == MBC2)
+                    LoadImage.Address[22:14] =
+                        (ROMBankID[3:0] == '0 && MapperType == MBC2)
                         ? '1
                         : ROMBankID[8:0];
                 end
