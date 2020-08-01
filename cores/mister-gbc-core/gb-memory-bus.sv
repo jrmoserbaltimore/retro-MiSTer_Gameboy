@@ -1,7 +1,30 @@
 // vim: sw=4 ts=4 et
 // This is a full CPU memory bus controller.
 
-
+// TODO:  Figure how to share IO/HRAM/Interrupt with other modules:
+//     - HRAM is totally controlled here
+//     - Video RAM I/O registers belong to VRAM
+//       - FF40-FF42, FF44, FF45, FF47-FF4A
+//       - FF46 (OAM)
+//       - FF68-FF6A (CGB)
+//       - FF51-FF55 (CGB OAM)
+//       - FF4F (CGB VRAM Bank)
+//     - Sound
+//       - FF10-14, FF16-FF1E, FF20-FF26, FF30-3F
+//     - Joystick (here?)
+//       - FF00
+//     - Serial (I/O?)
+//       - FF01-FF02
+//     - Timer (not MBC3 RTC) (Here?)
+//       - FF04-FF07
+//     - Interrupt (Definitely needs to be in Gameboy)
+//       - FFFF Interrupt Enable
+//       - FF0F Interrupt Flag
+//     - GBC etc
+//       - FF4D Prepare speed switch (Gameboy reg)
+//       - FF56 IR port (I/O?)
+//       - FF6C obj prio mode (Video?)
+//       - FF70 WRAM bank (handled here)
 module GBCMemoryBus
 #(
     parameter string DeviceType = "Xilinx"
@@ -24,94 +47,111 @@ module GBCMemoryBus
 );
 
     logic IsCGB;
+    logic ['hff00:'hffff][7:0] IOHRAM;
 
-    logic ['hff00:'hff7f][7:0] IORegisters;
-    logic ['hff80:'hfffe][7:0] HRAM;
-
-    // Map SystemRAM
-    // Bank 0 at $C000 to $CFFF
-    // Banks 1-7 at $D000 to $DFFF
-    // Banks are 4KiB, so the address for $D000-$DFFF is 12 bits plus the bank number at the top.
-    // Bank select 0 puts bank 1 at $D000.
-    // The bank select is $FF70 [2:0]
-
-    // VRAM bank selector
-    assign VideoRAM.Address[13] = IORegisters['hff4f][0] & IsCGB;
-    assign VideoRAM.Address[12:0] = MemoryBus.Address[12:0];
+    wire AddressCart;
+    wire AddressVRAM;
+    wire AddressWRAM;
+    wire AddressOAM;
+    wire AddressIOHRAM;
     
-    // WRAM bank selector
-    assign SystemRAM.Address[13:12] = (MemoryBus.Address[13:12] == 'b00) ? 'b00 : // Accessing the lower bank
-                                      (!IsCGB || IORegisters['hff70] == 'b00) ? 'b01 : // 00 = bank 1, also Bank 1 on CGB
-                                      IORegisters['hff70];
-    assign SystemRAM.Address[11:0] = MemoryBus.Address[11:0];
-    
+    logic [7:0] DOutReg;
+
+    // ======================================================
+    // = Map Cartridge to $0000 to $7FFF and $A000 to $BFFF =
+    // ======================================================
     // Mapper supplies:
     //   - $0000-$3FFF fixed bank ROM
     //   - $4000-$7FFF bank swap ROM
     //   - $A000-$BFFF 8k cartridge ram space
-    
-    // TODO: $FE00-$FE9F OAM table
-    
+    assign AddressCart = MemoryBus.Address[15] == '0 || MemoryBus.Address[15:13] == 3'b101;
+
+    assign Cartridge.Access = AddressCart && MemoryBus.Access;
+    assign Cartridge.Write = AddressCart && MemoryBus.Write;
+    assign Cartridge.DToTarget = MemoryBus.DToTarget;
+
+    // ==================================
+    // = Map VideoRAM to $8000 to $9FFF =
+    // ================================== 
+    // $FF4F [0] selects which bank
+    // 1000 0000 0000 0000
+    // 1001 1111 1111 1111
+    assign AddressVRAM = (MemoryBus.Address[15:13] == 3'b100);
+    assign VideoRAM.Access = AddressVRAM && MemoryBus.Access;
+    assign VideoRAM.Write = AddressVRAM && MemoryBus.Write;
+
+    assign VideoRAM.Address[13] = IOHRAM['hff4f][0] & IsCGB;
+    assign VideoRAM.Address[12:0] = MemoryBus.Address[12:0];
+    assign VideoRAM.DToTarget = MemoryBus.DToTarget;
+
+    // =======================================================
+    // = Map SystemRAM to $C000 to $DFFF echo $E000 to $FDFF =
+    // =======================================================
+    // Bank 0 at $C000 to $CFFF
+    // Banks 1-7 at $D000 to $DFFF
+
+    // System RAM Bank 0:
+    // 1100 0000 0000 0000
+    // 1100 1111 1111 1111
+
+    // System RAM bank 1-7:
+    // 1101 0000 0000 0000
+    // 1101 1111 1111 1111
+
+    assign AddressWRAM = (MemoryBus.Address[15:14] == 3'b11 && MemoryBus.Address[13:9] != 'b11111);
+    // Have to skip OAM
+    assign SystemRAM.Access = AddressWRAM && MemoryBus.Access;
+    assign SystemRAM.Write = AddressWRAM && MemoryBus.Write;
+
+    // Banks are 4KiB, so the address for $D000-$DFFF is 12 bits plus the bank number at the top.
+    // Bank select 0 puts bank 1 at $D000.
+    // The bank select is $FF70 [2:0]    
+    assign SystemRAM.Address[13:12] = (MemoryBus.Address[13:12] == 'b00) ? 'b00 : // Accessing the lower bank
+                                      (!IsCGB || IOHRAM['hff70] == 'b00) ? 'b01 : // 00 = bank 1, also Bank 1 on CGB
+                                      IOHRAM['hff70]; // Select from an upper bank on CGB
+    assign SystemRAM.Address[11:0] = MemoryBus.Address[11:0];
+    assign SystemRAM.DToTarget = MemoryBus.DToTarget;
+
+    // $FE00-$FE9F OAM table
+    // $FF00-$FF7F I/O
+    // $FF80-$FFFE HRAM
+    //       $FFFF Interrupt register
+    assign AddressOAM = MemoryBus.Address[15:8] == 'hfe &&
+                       (MemoryBus.Address[7] == '0 || MemoryBus.Address[6:5] == 2'b00);
+    assign AddressIOHRAM = MemoryBus.Address[15:8] == 'hff;
+
     always_comb
     begin
-        // Data to send to vrams/wram
-        VideoRAM.DToTarget = MemoryBus.DToTarget;
-        SystemRAM.DToTarget = MemoryBus.DToTarget;
-        
-        // GamePakBus.Audio = ?;
-        if (MemoryBus.Address[15:13] == 3'b100)
+        if (AddressCart) // Cartridge
         begin
-            // Map VideoRAM to $8000 to $9FFF
-            // $FF4F [0] selects which bank
-            // 1000 0000 0000 0000
-            // 1001 1111 1111 1111
-            VideoRAM.Access = MemoryBus.Access;
-            VideoRAM.Write = MemoryBus.Write;
-
+            MemoryBus.DToInitiator = Cartridge.DToInitiator;
+            MemoryBus.Ready = Cartridge.Ready;
+            MemoryBus.DataReady = Cartridge.DataReady;
+            // GamePakBus.Audio = ?;
+        end else if (AddressVRAM)
+        begin
             // Gameboy talks to the VRAM now
             MemoryBus.DToInitiator = VideoRAM.DToInitiator;
             MemoryBus.Ready = VideoRAM.Ready;
             MemoryBus.DataReady = VideoRAM.DataReady;
-        end else
+        end else if (AddressWRAM)
         begin
-            // VRAM ignore address/data
-            VideoRAM.Access = '0;
-            VideoRAM.Write = '0;
-        end
-        
-        // $C000-$DFFF and $E000-$FFDF
-        if (
-            MemoryBus.Address[15:13] == 3'b110 ||
-            (MemoryBus.Address[15:13] == 3'b111 && MemoryBus.Address[12:9] != 'b1111) // Echo RAM
-           )
-        begin
-            // System RAM Bank 0:
-            // 1100 0000 0000 0000
-            // 1100 1111 1111 1111
-
-            // System RAM bank 1-7:
-            // 1101 0000 0000 0000
-            // 1101 1111 1111 1111
-           
-            SystemRAM.Access = MemoryBus.Access;
-            SystemRAM.Write = MemoryBus.Write;
-           
             MemoryBus.DToInitiator = SystemRAM.DToInitiator;
             MemoryBus.Ready = SystemRAM.Ready;
             MemoryBus.DataReady = SystemRAM.DataReady;
-        end else
+        end else if (AddressOAM)
+            // TODO:  OAM
         begin
-            SystemRAM.Access = '0;
-            SystemRAM.Write = '0;
-        end
-        
-        if (MemoryBus.Address[15:14] == 2'b10) // Cartridge
+        end else if (AddressIOHRAM)
         begin
-            Cartridge.Access = MemoryBus.Access;
-            Cartridge.Write = MemoryBus.Write;
-            MemoryBus.DToInitiator = Cartridge.DToInitiator;
-            MemoryBus.Ready = Cartridge.Ready;
-            MemoryBus.DataReady = Cartridge.DataReady;
+            MemoryBus.Ready = '1;
+            MemoryBus.DataReady = '1;
+            MemoryBus.DToInitiator = IOHRAM[MemoryBus.Address];
+        end else begin
+            // Not implemented/accessible, ignore
+            MemoryBus.DToInitiator = '0;
+            MemoryBus.Ready = '1;
+            MemoryBus.DataReady = '1;
         end
     end
     
@@ -119,13 +159,8 @@ module GBCMemoryBus
     if (ClkEn)
     begin
         // HRAM
-        if (MemoryBus.Address & 'hff80 == 'hff80 && MemoryBus.Address[6:0] != 'h7f && MemoryBus.Access)
-        begin
-            if (MemoryBus.Write)
-                HRAM[MemoryBus.Address] = MemoryBus.DToTarget;
-            else
-                MemoryBus.DToInitiator = HRAM[MemoryBus.Address];
-        end
+        if (AddressIOHRAM && MemoryBus.Write)
+            IOHRAM[MemoryBus.Address] <= MemoryBus.DToTarget;
     end
 
 endmodule
