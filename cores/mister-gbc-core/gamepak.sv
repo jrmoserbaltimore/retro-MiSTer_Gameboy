@@ -1,5 +1,7 @@
 // vim: sw=4 ts=4 et
-
+// Copyright (c) 2020 Moonset Technologies, LLC
+// License:  MIT, see LICENSE.md
+//
 // Game Boy Color GamePak interface
 interface IGBCGamePak
 (

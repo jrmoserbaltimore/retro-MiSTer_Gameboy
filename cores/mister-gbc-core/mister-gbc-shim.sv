@@ -1,4 +1,7 @@
 // vim: sw=4 ts=4 et
+// Copyright (c) 2020 Moonset Technologies, LLC
+// License:  MIT, see LICENSE.md
+//
 // Game Boy Color Shim.  The shim sets up for an actual core, creating RAM objects, mapping the
 // expansion port (e.g. to a cartridge), exposing the controller properly to the core, managing
 // CATC, handling cache, and so forth.
@@ -6,6 +9,12 @@
 // This is the core shim.  RetroConosle connects everything to this, which then connects to the
 // core module.  In here we set up various types of RAM, clock control, the cartridge controller,
 // and any peripherals.
+//
+// Detecting DMG, CGB, GBA:
+//   - DMG:  CPU A register == 0x01 (also SGB)
+//   - MGB:  CPU A register == 0xff (Gameboy Pocket, SGB2)
+//   - CGB:  CPU A register == 0x11, B[0] == 0
+//   - GBA:  CPU A register == 0x11, B[0] == 1 
 module RetroCoreShim
 #(
     parameter string DeviceType = "Xilinx",

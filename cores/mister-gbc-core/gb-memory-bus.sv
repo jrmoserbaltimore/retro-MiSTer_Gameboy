@@ -1,4 +1,7 @@
 // vim: sw=4 ts=4 et
+// Copyright (c) 2020 Moonset Technologies, LLC
+// License:  MIT, see LICENSE.md
+//
 // This is a full CPU memory bus controller.
 
 // TODO:  Figure how to share IO/HRAM/Interrupt with other modules:
@@ -38,7 +41,7 @@ module GBCMemoryBus
 
     // RAM for memory map
     IRetroMemoryPort.Initiator SystemRAM, // Gameboy system RAM
-    IRetroMemoryPort.Initiator VideoRAM, // VRAM module
+    IRetroMemoryPort.Initiator VideoRAM, // Video module
 
     // Cartridge controller
     IRetroMemoryPort.Initiator Cartridge,
@@ -64,6 +67,7 @@ module GBCMemoryBus
     //   - $0000-$3FFF fixed bank ROM
     //   - $4000-$7FFF bank swap ROM
     //   - $A000-$BFFF 8k cartridge ram space
+    // 3 inputs
     assign AddressCart = MemoryBus.Address[15] == '0 || MemoryBus.Address[15:13] == 3'b101;
 
     assign Cartridge.Access = AddressCart && MemoryBus.Access;
@@ -76,12 +80,15 @@ module GBCMemoryBus
     // $FF4F [0] selects which bank
     // 1000 0000 0000 0000
     // 1001 1111 1111 1111
+    // 3 inputs
     assign AddressVRAM = (MemoryBus.Address[15:13] == 3'b100);
     assign VideoRAM.Access = AddressVRAM && MemoryBus.Access;
     assign VideoRAM.Write = AddressVRAM && MemoryBus.Write;
 
-    assign VideoRAM.Address[13] = IOHRAM['hff4f][0] & IsCGB;
-    assign VideoRAM.Address[12:0] = MemoryBus.Address[12:0];
+    // VRAM bank or OAM
+    assign VideoRAM.Address = AddressVRAM
+                            ? {2'b00, IOHRAM['hff4f][0] & IsCGB, MemoryBus.Address[12:0]}
+                            : MemoryBus.Address; 
     assign VideoRAM.DToTarget = MemoryBus.DToTarget;
 
     // =======================================================
@@ -98,17 +105,20 @@ module GBCMemoryBus
     // 1101 0000 0000 0000
     // 1101 1111 1111 1111
 
-    assign AddressWRAM = (MemoryBus.Address[15:14] == 3'b11 && MemoryBus.Address[13:9] != 'b11111);
     // Have to skip OAM
+    // 7 inputs
+    assign AddressWRAM = (MemoryBus.Address[15:14] == 3'b11 && MemoryBus.Address[13:9] != 'b11111);
+
     assign SystemRAM.Access = AddressWRAM && MemoryBus.Access;
     assign SystemRAM.Write = AddressWRAM && MemoryBus.Write;
 
     // Banks are 4KiB, so the address for $D000-$DFFF is 12 bits plus the bank number at the top.
     // Bank select 0 puts bank 1 at $D000.
-    // The bank select is $FF70 [2:0]    
-    assign SystemRAM.Address[13:12] = (MemoryBus.Address[13:12] == 'b00) ? 'b00 : // Accessing the lower bank
-                                      (!IsCGB || IOHRAM['hff70] == 'b00) ? 'b01 : // 00 = bank 1, also Bank 1 on CGB
-                                      IOHRAM['hff70]; // Select from an upper bank on CGB
+    // The bank select is $FF70 [2:0]
+    // 6 inputs
+    assign SystemRAM.Address[14:12] = (MemoryBus.Address[13:12] == 'b00) ? 'b00 : // Accessing the lower bank
+                                      (!IsCGB || IOHRAM['hff70][2:0] == 'b000) ? 'b01 : // 00 = bank 1, also Bank 1 on CGB
+                                      IOHRAM['hff70][2:0]; // Select from an upper bank on CGB
     assign SystemRAM.Address[11:0] = MemoryBus.Address[11:0];
     assign SystemRAM.DToTarget = MemoryBus.DToTarget;
 
@@ -116,8 +126,9 @@ module GBCMemoryBus
     // $FF00-$FF7F I/O
     // $FF80-$FFFE HRAM
     //       $FFFF Interrupt register
+    // 10 inputs
     assign AddressOAM = MemoryBus.Address[15:8] == 'hfe &&
-                       (MemoryBus.Address[7] == '0 || MemoryBus.Address[6:5] == 2'b00);
+                       (MemoryBus.Address[7] == '0 || MemoryBus.Address[5] == 1'b0);
     assign AddressIOHRAM = MemoryBus.Address[15:8] == 'hff;
 
     always_comb

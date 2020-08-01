@@ -1,7 +1,9 @@
 // vim: sw=4 ts=4 et
-// GBC Cartridge Controller
+// Copyright (c) 2020 Moonset Technologies, LLC
+// License:  MIT, see LICENSE.md
 //
-// This is a full CPU memory bus controller.
+// GBC Cartridge Controller
+// Determines if connecting to cartridge; if not, uses mapper and emulates cartridge.
 
 module GBCCartridgeController
 #(

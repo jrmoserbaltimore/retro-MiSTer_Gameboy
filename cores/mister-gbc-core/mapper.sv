@@ -1,4 +1,7 @@
 // vim: sw=4 ts=4 et
+// Copyright (c) 2020 Moonset Technologies, LLC
+// License:  MIT, see LICENSE.md
+//
 // Every Game Boy Color mapper implemented at once.
 //
 // Save RAM is interesting:  CartridgeRAM writes go to a cache, which writes back every several
