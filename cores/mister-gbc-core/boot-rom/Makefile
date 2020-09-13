@@ -1,20 +1,26 @@
 
-all: retro-gbc-mapper-setup.img retro-gbc-boot-rom.img
 
-retro-gbc-mapper-setup.o: retro-gbc-mapper-setup.asm
-	rgbasm retro-gbc-mapper-setup.asm -o retro-gbc-mapper-setup.o -v -Weverything
+rgbchimem_obj := \
+	retro-gbc-boot-highmem.o \
+	retro-gbc-mapper-setup.o \
+	retro-gbc-draw-logo.o
 
-retro-gbc-mapper-setup.img: retro-gbc-mapper-setup.o
-	rgblink retro-gbc-mapper-setup.o -o retro-gbc-mapper-setup.img -v -x
+rgbcbootrom_obj := \
+	retro-gbc-boot-rom.o
 
+all: retro-gbc-boot-highmem.img retro-gbc-boot-rom.img
 
-retro-gbc-boot-rom.o: retro-gbc-boot-rom.asm
-	rgbasm retro-gbc-boot-rom.asm -o retro-gbc-boot-rom.o -v -Weverything
+%.o : %.asm
+	rgbasm $< -o $@ -v -Weverything
 
-retro-gbc-boot-rom.img: retro-gbc-boot-rom.o
-	rgblink retro-gbc-boot-rom.o -o retro-gbc-boot-rom.img -v -x
+retro-gbc-boot-highmem.img: ${rgbchimem_obj}
+	rgblink $^ -o $@ -v -x
 
+retro-gbc-boot-rom.img: ${rgbcbootrom_obj}
+	rgblink $^ -o $@ -v -x
 
 clean:
-	rm -f retro-gbc-mapper-setup.o retro-gbc-mapper-setup.img \
-	 retro-gbc-boot-rom.o retro-gbc-boot-rom.img
+	rm -f ${rgbchimem_obj} \
+	${rgbcbootrom_obj} \
+	retro-gbc-boot-rom.img \
+	retro-gbc-boot-highmem.img

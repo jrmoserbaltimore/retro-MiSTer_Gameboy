@@ -10,8 +10,8 @@
 ; Boot ROM needs to `CALL $C000` when using a software ROM.
 ;
 ; This is position-independent code
-SECTION "RetroBoot", ROM0[$0000]
-LOAD "RetroBootCode", WRAM0
+SECTION "MapperSetup", ROM0[$0020]
+LOAD "MapperSetupCode", WRAM0[$c020]
 
 MAPPER_TYPE equ $fea0
 ROM_SIZE equ $fea1
@@ -24,12 +24,9 @@ HDR_TYPE equ $0147
 HDR_ROM_SIZE equ $0148
 HDR_RAM_SIZE equ $0149
 
-EntryPoint:
-jr .Enter
-
-db "ADV-BOOT"
-
-.Enter:
+db "MAPPER SETUP"
+MapperSetup:
+EXPORT MapperSetup
 ; Set MapperType to ROM
 ld A, $01
 ld [MAPPER_TYPE], A
