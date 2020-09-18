@@ -18,7 +18,8 @@ ROM_SIZE equ $fea1
 RAM_SIZE equ $fea2
 ROM_BANK_MASK_LO equ $fea3
 ROM_BANK_MASK_HI equ $fea4
-CART_FEATURES equ $fea5
+RAM_BANK_MASK equ $fea5
+CART_FEATURES equ $fea6
 
 HDR_TYPE equ $0147
 HDR_ROM_SIZE equ $0148
@@ -125,6 +126,22 @@ xor A, $01
 .set_ram_size_write:
 ;ld HL, RAM_SIZE
 ld [RAM_SIZE], A
+
+; set up RAM size mask
+cp A, $03
+jr NC, .ram_mask_calc
+ld A, $00
+jr .set_ram_mask
+.ram_mask_calc:
+ld B,A
+dec B ; $03 becomes 1 << $02, etc.
+ld A,1
+.set_ram_mask_calculate_loop:
+sla A
+dec B
+jr NZ, .set_ram_mask_calculate_loop
+.set_ram_mask:
+ld [RAM_BANK_MASK], A
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Set up mappers and features ;

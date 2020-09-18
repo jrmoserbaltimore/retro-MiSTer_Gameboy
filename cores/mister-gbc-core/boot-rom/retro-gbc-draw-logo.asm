@@ -10,8 +10,8 @@
 ; Boot ROM needs to `CALL $C000` when using a software ROM.
 ;
 ; This is position-independent code
-SECTION "DrawLogo", ROM0[$0150]
-LOAD "DrawLogoCode", WRAM0[$c150]
+SECTION "DrawLogo", ROM0[$0160]
+LOAD "DrawLogoCode", WRAM0[$c160]
 
 db "DRAW LOGO"
 DrawLogo:

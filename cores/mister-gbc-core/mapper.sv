@@ -32,6 +32,8 @@
 //  - Once boot ROM writes non-zero to $FF50, mapper registers are fixed
 //
 // This avoids doing work in here, instead relying on a custom boot ROM.
+//
+// The mapper appears to be logic depth 6 and not much routing.  tv80 Z80 is 7ns critical path.
 module GBCMapper
 (
     IWishbone.SysCon SysCon,
@@ -124,6 +126,12 @@ module GBCMapper
     // Stall if either bus is stalling, Initiator changed buses, or we can't count more pending ACKs
     assign MemoryBus.STALL = LoadImage.STALL | CartridgeRAM.STALL | BusSwitch | &OutstandingTransactions;
 
+    assign TimerAccess = HasTimer && RAMBankID[3] && MemoryBus.STB && RAMEnabled;
+
+    // This is probably critical path, should be about 6 depth.  The biggest offender is
+    // determining which internal register is actually in use, which can be simplified and then
+    // pipelined if the mapper is the critical path.  Mapper register writes are a rare event and
+    // added latency has much less impact than added delay.
     always_ff @(posedge SysCon.CLK)
     begin
         var int DeltaOT;
@@ -225,77 +233,83 @@ module GBCMapper
             // ==========================
             // = Mapper register access =
             // ==========================
-            if (!MemoryBus.ADDR[15]) // Below $8000
+              // Writes to mapper registers must control the stored register values so the simple read
+            // logic doesn't get bad input.
+            if (MapperType[ROM])
             begin
-                // Writes to mapper registers must control the stored register values so the simple read
-                // logic doesn't get bad input.
-                if (MapperType[ROM])
+                // This space intentionally left blank
+            end
+            if (MapperType[4:1]) // MBC1 to MBC5
+            case (MemoryBus.ADDR[15:13])
+                // Type MBC1-MBC5 are fairly similar, and the same logic can make a number of decisions
+                // about which action to take for which mapper.  These mappers support different sizes
+                // of ROM and RAM.
+                3'b000: // 'h0000 to 'h1fff
                 begin
-                    // This space intentionally left blank
+                    //$0000-$1FFF   RAM enable (set to $0a) MBC1, MBC2, MBC3, MBC5
+                    //              Timer enable            MBC3
+                    if (!MapperType[MBC2] || MemoryBus.ADDR[8])
+                        RAMEnabled <= (MemoryBus.DAT_ToTarget[3:0] == 'ha);
+                    else // Always below 'h2fff for MBC5
+                        ROMBankID[7:0] <= (!MemoryBus.DAT_ToTarget && !MapperType[MBC5])
+                                          ? '1
+                                          : MemoryBus.DAT_ToTarget & ROMBankMask[7:0];
                 end
-                if (MapperType[4:1]) // MBC1 to MBC5
-                case (MemoryBus.ADDR[15:13])
-                    // Type MBC1-MBC5 are fairly similar, and the same logic can make a number of decisions
-                    // about which action to take for which mapper.  These mappers support different sizes
-                    // of ROM and RAM.
-                    3'b000: // 'h0000 to 'h1fff
+                3'b001: //('h2000..'h3fff)
+                begin
+                    //$2000-$3FFF   ROM Bank number         MBC1, MBC2, MBC3
+                    //$2000-$2FFF   ROM Bank low bits       MBC5
+                    //$3000-$3FFF   ROM Bank high bits      MBC5
+                    if (MapperType[MBC2] && MemoryBus.ADDR[8])
+                        RAMEnabled <= (MemoryBus.DAT_ToTarget[3:0] == 'ha);
+                    else if (!MapperType[MBC5] || !MemoryBus.ADDR[12]) // <= 'h2fff for MBC5
                     begin
-                        //$0000-$1FFF   RAM enable (set to $0a) MBC1, MBC2, MBC3, MBC5
-                        //              Timer enable            MBC3
-                        if (!MapperType[MBC2] || MemoryBus.ADDR[8])
-                            RAMEnabled <= (MemoryBus.DAT_ToTarget[3:0] == 'ha);
-                        else // Always below 'h2fff for MBC5
-                            ROMBankID[7:0] <= (!MemoryBus.DAT_ToTarget && !MapperType[MBC5])
-                                              ? '1
-                                              : MemoryBus.DAT_ToTarget & ROMBankMask[7:0];
-                    end
-                    3'b001: //('h2000..'h3fff)
+                        // MBC1 and MBC3 force '0 to '1
+                        ROMBankID[7:0] <= (!MemoryBus.DAT_ToTarget && !MapperType[MBC5])
+                                          ? '1
+                                          : MemoryBus.DAT_ToTarget & ROMBankMask[7:0];
+                    end else // MBC5 high bits
                     begin
-                        //$2000-$3FFF   ROM Bank number         MBC1, MBC2, MBC3
-                        //$2000-$2FFF   ROM Bank low bits       MBC5
-                        //$3000-$3FFF   ROM Bank high bits      MBC5
-                        if (!MapperType[MBC5] || !MemoryBus.ADDR[12]) // <= 'h2fff for MBC5
-                        begin
-                            // MBC1 and MBC3 force '0 to '1
-                            ROMBankID[7:0] <= (!MemoryBus.DAT_ToTarget && !MapperType[MBC5])
-                                              ? '1
-                                              : MemoryBus.DAT_ToTarget & ROMBankMask[7:0];
-                        end else // MBC5 high bits
-                        begin
-                            ROMBankID <= {MemoryBus.DAT_ToTarget[0] & ROMBankMask[8], ROMBankID[7:0]};
-                        end
+                        ROMBankID <= {MemoryBus.DAT_ToTarget[0] & ROMBankMask[8], ROMBankID[7:0]};
                     end
-                    3'b010: // ('h4000..'h5fff)
+                end
+                3'b010: // ('h4000..'h5fff)
+                begin
+                    //$4000-$5FFF   RAM bank number         MBC1, MBC3, MBC5
+                    //              ROM bank high bits      MBC1 (1Mb+ carts)
+                    //              RTC Register select     MBC3 (higher values)
+                    // MBC1 behavior is based on RAM and ROM size
+                    // MBC3 and MBC5 behave normally
+                    // FIXME:  Doesn't set ROM bank high bits for MBC1 1Mb+
+                    RAMBankID <= MemoryBus.DAT_ToTarget[3:0];
+                end
+                3'b011: //('h6000..'h7fff)
+                begin
+                    //$6000-$7FFF   Banking mode select     MBC1
+                    //              Latch clock data        MBC3
+                    // Both registers are the BankingMode register; they're exclusive to their
+                    // respective mappers
+                    BankingMode <= MemoryBus.DAT_ToTarget[0];
+                    // TODO:  If (TimerAccess) and BankingMode 0 -> 1, latch
+                end
+                3'b101: // 'ha000..'hbfff, RAM and timer
+                begin
+                    if (TimerAccess)
                     begin
-                        //$4000-$5FFF   RAM bank number         MBC1, MBC3, MBC5
-                        //              ROM bank high bits      MBC1 (1Mb+ carts)
-                        //              RTC Register select     MBC3 (higher values)
-                        // MBC1 behavior is based on RAM and ROM size
-                        // MBC3 and MBC5 behave normally
-                        // FIXME:  Doesn't set ROM bank high bits for MBC1 1Mb+
-                        RAMBankID <= MemoryBus.DAT_ToTarget[3:0];
+                    // TODO:  RTC access
+                        // FIXME:  Need to latch the registers when appropriate
+                        // FIXME:  When setting the clock, store the offset from the real RTC
+                    
+                        // Write to the timer registers
+                        //if (MemoryBus.WE) RTCRegisters[RAMBankID[2:0]] <= MemoryBus.DAT_ToInitiator;
                     end
-                    3'b011: //('h6000..'h7fff)
-                    begin
-                        //$6000-$7FFF   Banking mode select     MBC1
-                        //              Latch clock data        MBC3
-                        // Both registers are the BankingMode register; they're exclusive to their
-                        // respective mappers
-                        BankingMode <= MemoryBus.DAT_ToTarget[0];
-                    end
-                    3'b101: // 'ha000..'hbfff, RAM and timer
-                    begin
-                        if (TimerAccess)
-                        begin
-                        end
-                    end
-                endcase // Mappers MBC1 to MBC5
-                // MBC6:  Net de Get Minigame @ 100, no other games, and not useful
-                // MBC7:  Kirby Tilt 'n Tumble, Command Master
-                // MMM01:  Taito variety pack
-                // TAMA5:  Tamogaci
-                // HuC1:  a few games
-            end // ROM-space Mapper registers (<$8000)
+                end
+            endcase // Mappers MBC1 to MBC5
+            // MBC6:  Net de Get Minigame @ 100, no other games, and not useful
+            // MBC7:  Kirby Tilt 'n Tumble, Command Master
+            // MMM01:  Taito variety pack
+            // TAMA5:  Tamogaci
+            // HuC1:  a few games
         end // Register access
         // =================
         // = ROM bank read =
@@ -319,7 +333,7 @@ module GBCMapper
             };
         end // ROM bank read
         // =================
-        // = ROM bank read =
+        // = RAM bank read =
         // =================
         else if (MemoryBus.ADDR[15:13] == 'b101) // Read from mapped RAM
         begin
@@ -371,21 +385,36 @@ module GBCMapper
 
     // This translates incoming addresses to the correct address in LoadImage and CartridgeRAM
     assign LIAddress[13:0] = MemoryBus.ADDR[13:0];
+    // 1 logic depth mux, switches in parallel to the always_comb below
     assign LIAddress[22:14] = MemoryBus.ADDR[14] ? UpperROMBank : LowerROMBank;
+    assign CRAddress[12:0] = MemoryBus.ADDR[12:0];
+    assign CRAddress[16:13] = RAMBank;
+
+    // This needs to not be a critical path.  Total logic depth is 2 (3 with mux)
+    // Can reduce depth by providing a separate ROM mapper and removing ROM, stuff, but that adds
+    // complexity to the system bus. 
     always_comb
     begin
+        // This if statement should select an output from a MUX, so in parallel to its contents.
         if (MapperType[MBC1] || MapperType[MBC2] || MapperType[MBC3] || MapperType[MBC5])
         begin
-            // Can't be 0
+            // Can't be 0 except on MBC5
+            // This is two logic levels deep and leaves resources for two wires; it begins at the
+            // root of this always_comb block.
+            // 5-LUT: ROMBankID[4:1] || MapperType[MBC5]
+            // 5-LUT: ROMBankID[0] & (A || (MapperType[MBC3] && ROMBankID[6:5]))
+            // Might save the Mux by ORing with MapperType[ROM]
             UpperROMBank[0] = ROMBankID[0] &
                               (
                                 ROMBankID[4:1] // MBC1
-                                || (
-                                    MapperType[MBC5]
-                                    || (MapperType[MBC3] && ROMBankID[6:5])
-                                   )
+                                || MapperType[MBC5]
+                                || (MapperType[MBC3] && ROMBankID[6:5])
                               );
+            // One logic level from root
             UpperROMBank[4:1] = (ROMBankID[4:1] & ROMBankMask[4:1]);
+            // In total, each bit depends on:
+            // MapperType[MBC1], BankingMode, RAMBankID, ROMBankMask, ROMBankID, ROMBankMask
+            // One 6-LUT per bit (or to select a mux).
             if (MapperType[MBC1])
             begin
                 UpperROMBank[6:5] = (BankingMode && ROMBankMask[5]) ? RAMBankID[1:0] : '0;
@@ -401,6 +430,8 @@ module GBCMapper
             LowerROMBank[6:5] = (BankingMode && ROMBankMask[5]) ? RAMBankID[1:0] : '0;
             LowerROMBank[8:7] = '0;
             
+            // Mux into a 2-output 6-LUT (two 2-LUT), or 1 5-LUT per bit.
+            // Logic depth 2 is still our critical path.
             RAMBank = ((BankingMode && !ROMBankMask[5]) || !MapperType[MBC1])
                       ? RAMBankID & RAMBankMask // Anything not MBC1 with RAM banking off
                       : '0; // MBC1 if RAM banking off
@@ -414,64 +445,5 @@ module GBCMapper
         // MBC6 is only one game; MBC7 has accelerometers.
         // HuC1 used IR COMM, Pokemon TCG used this
     end
-    // FIXME:  REWRITE THE BELOW
-    // ===================
-    // = RAM bank access =
-    // ===================
-    // MBC3 has a real-time clock mappable into its RAM bank.
-    // As with the ROM bank, just do good house keeping when setting registers.
-    // FIXME:  Rework this, it's very broken 
-    assign TimerAccess = HasTimer && RAMBankID[3] && MemoryBus.STB && RAMEnabled;
-    //assign CartridgeRAM.Access = MemoryBus.ADDR && (MemoryBus.ADDR[15:13] == 'b101)
-    //                             && RAMEnabled && !TimerAccess;
-    assign CartridgeRAM.WE  = MemoryBus.WE && CartridgeRAM.STB;
-    assign CartridgeRAM.DAT_ToTarget = MemoryBus.DAT_ToTarget; // Is this ever not true?
-    assign CartridgeRAM.ADDR[12:0] = MemoryBus.ADDR[12:0];
-    assign CartridgeRAM.SEL = '1;
 
-    always_comb
-    if (
-        i_valid &&
-        // MemoryBus.Address >= 'ha000 && MemoryBus.Address < 'hc000
-        MemoryBus.ADDR[15:13] == 'b101 // Cartridge RAM range
-       )
-    begin
-        if (MapperType >= ROM && MapperType <= MBC5)
-        begin
-            // MBC1 doesn't bank RAM if banking mode is 0, RAM is small, or ROM is large.
-            if (MapperType == MBC1 && (BankingMode == '0 || RAMSize < 'h2 || ('h8 >= ROMSize && ROMSize >= 'h5)))
-                CartridgeRAM.ADDR[16:13] = MemoryBus.ADDR[12:0];
-            else
-                CartridgeRAM.ADDR[16:13] = RAMBankID[3:0];
-        end
-    end
-    else
-        CartridgeRAM.ADDR[16:13] = '0;
-
-    // Set the timer registers on clock tick
-    // FIXME:  Need to latch the registers when appropriate
-    // FIXME:  When setting the clock, store the offset from the real RTC
-    always_ff @(posedge Clk)
-    if (TimerAccess && MemoryBus.WE && MemoryBus.ADDR[15:13] == 'b101) // Cartridge RAM range
-    begin
-        // Write to the timer registers
-        RTCRegisters[RAMBankID[2:0]] <= MemoryBus.DAT_ToInitiator;
-    end
-    
-    /*  FIXME:  Broken
-    // Set the bus to access
-    // Only ROM and CRAM area are valid
-    always_comb
-    //if (MemoryBus.Access && !MemoryBus.Write && MemoryBus.Address[15] == '0) //< 'h8000)
-    if (!(MemoryBus.Address & 'h8000)) // ROM
-    begin
-        MemoryBus.DAT_ToInitiator = LoadImage.DAT_ToInitiator;
-    end else // if (MemoryBus.Address[15:13] == 'b101) // Cartridge RAM range
-    begin
-        if (TimerAccess)
-            MemoryBus.DToInitiator = RTCRegisters[RAMBankID[2:0]];
-        else
-            MemoryBus.DToInitiator = RAMEnabled ? CartridgeRAM.DToInitiator : '0;
-    end
-    */
 endmodule
