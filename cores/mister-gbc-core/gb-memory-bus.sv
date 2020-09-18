@@ -30,23 +30,21 @@
 //       - FF70 WRAM bank (handled here)
 module GBCMemoryBus
 #(
-    parameter string DeviceType = "Xilinx"
+    parameter DeviceType = "Xilinx"
 )
 (
-    logic Clk,
-    logic ClkEn,
-    // Communication to main system.  System can call for boot from ROM, and controller can call
-    // for save states and save RAM.
-    IRetroComm.Target Comm,
+    IWishbone.SysCon SysCon,
 
     // RAM for memory map
-    IRetroMemoryPort.Initiator SystemRAM, // Gameboy system RAM
-    IRetroMemoryPort.Initiator VideoRAM, // Video module
+    IWishbone.Initiator SystemRAM, // Gameboy system RAM
+    IWishbone.Initiator VideoRAM, // Video module
 
     // Cartridge controller
-    IRetroMemoryPort.Initiator Cartridge,
+    IWishbone.Initiator Cartridge,
     // System bus it exposes
-    IRetroMemoryPort.Target MemoryBus
+    // Communication to main system via TGC.  System can call for boot from ROM, and controller can
+    // call for save states and save RAM.
+    IWishbone.Target MemoryBus
 );
 
     logic IsCGB;
@@ -166,8 +164,7 @@ module GBCMemoryBus
         end
     end
     
-    always_ff @(posedge Clk)
-    if (ClkEn)
+    always_ff @(posedge SysCon.CLK)
     begin
         // HRAM
         if (AddressIOHRAM && MemoryBus.Write)

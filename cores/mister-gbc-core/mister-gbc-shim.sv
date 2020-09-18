@@ -17,8 +17,8 @@
 //   - GBA:  CPU A register == 0x11, B[0] == 1 
 module RetroCoreShim
 #(
-    parameter string DeviceType = "Xilinx",
-    parameter int CoreClock = 200000000 // 200MHz FPGA core clock
+    parameter DeviceType = "Xilinx",
+    parameter CoreClock = 200000000 // 200MHz FPGA core clock
 )
 (
     // The console sends a core system clock (e.g. 200MHz) and a clock-enable to produce the
@@ -28,11 +28,11 @@ module RetroCoreShim
     // DDR System RAM or other large RAM.
     // MainRAM should be DMA/IOMMU controlled, and the host must indicate the location of the load
     // image. 
-    RetroMemoryPort.Initiator MainRAM,
+    IWishbone.Initiator MainRAM,
     // DDR, HyperRAM, or SRAM on the expansion bus
-    RetroMemoryPort.Initiator ExpansionRAM0,
-    RetroMemoryPort.Initiator ExpansionRAM1,
-    RetroMemoryPort.Initiator ExpansionRAM2,
+    IWishbone.Initiator ExpansionRAM0,
+    IWishbone.Initiator ExpansionRAM1,
+    IWishbone.Initiator ExpansionRAM2,
 
     output logic [12:0] AV,  // AV
     // ================
@@ -54,7 +54,8 @@ module RetroCoreShim
     output logic [31:0] ExpansionPortOut,
 
     // Console
-    RetroComm.Target Console
+    IWishbone.Target Console,
+    IWishbone.Target Test // XXX: For synthesis test so we don't get culled.  REMOVZ
 );
 
     wire Delay;
@@ -81,13 +82,13 @@ module RetroCoreShim
     // ======================
     // We create BRAMs in the shim so a different shim can use the GBC Cartridge Controller without
     // dedicating the BRAM exclusively to the GBC when not running.
-    IRetroMemoryPort
+    IWishbone
     #(
         .AddressBusWidth(15),
         .DataBusWidth(1) 
-    ) IGBSystemRAM;
+    ) IGBSystemRAM();
 
-    RetroBRAM
+    WishboneBRAM
     #(
         .AddressBusWidth(15),
         .DataBusWidth(1),
@@ -97,13 +98,13 @@ module RetroCoreShim
         .Initiator(IGBSystemRAM.Target)
     );
 
-    IRetroMemoryPort
+    IWishbone
     #(
         .AddressBusWidth(14),
         .DataBusWidth(1) 
-    ) IGBVideoRAM;
+    ) IGBVideoRAM();
 
-    RetroBRAM
+    WishboneBRAM
     #(
         .AddressBusWidth(14),
         .DataBusWidth(1),
@@ -111,6 +112,22 @@ module RetroCoreShim
     ) GBVideoRAM
     (
         .Initiator(IGBVideoRAM.Target)
+    );
+    
+    WishboneBRAM
+    #(
+        .AddressBusWidth(17),
+        .DataBusWidth(1) 
+    ) IGBCartridgeRAM();
+
+    (* dont_touch = "true" *)WishboneBRAM
+    #(
+        .AddressBusWidth(17),
+        .DataBusWidth(1),
+        .DeviceType(DeviceType)
+    ) GBCartridgeRAM
+    (
+        .Initiator(IGBCartridgeRAM.Target)
     );
     // TODO:  Chunk of BRAM for cartridge cache
     // TODO:  Chunk of BRAM for mappers
@@ -136,8 +153,8 @@ module RetroCoreShim
         .Read(CartridgeOut[3]),
         .CS(CartridgeOut[4]),
         .Address(CartridgeOut[20:5]),
-        .DataIn(CartridgeIn[28:21]),
-        .DataOut(CartridgeOut[28:21]),
+        .DFromPak(CartridgeIn[28:21]),
+        .DToPak(CartridgeOut[28:21]),
         .Reset(CartridgeOut[29]),
         .Audio(CartridgeIn[30])
     );
@@ -145,28 +162,62 @@ module RetroCoreShim
     // ========================
     // = Interface to GamePak =
     // ========================
-    IRetroMemoryPort
+    IWishbone
     #(
         .AddressBusWidth(16),
         .DataBusWidth(1)
     )
-    GamePakFrontend;
+    GamePakFrontend();
+
+    IWishbone
+    #(
+        .AddressBusWidth(16),
+        .DataBusWidth(1)
+    )
+    SystemBusFrontend();
 
     IGBCGamePakBus GamePakBus
     (
         .CS(CS),
         .Reset(Reset),
-        .AudioIn(AudioIn)
+        .Audio(AudioIn)
     );
+    
+    
+    // FIXME:  Hastily-assembled stuff to get this to actually synthesize
+    
+    IWishbone
+    #(
+        .AddressBusWidth(23),
+        .DataBusWidth(1) 
+    ) ILoadImage();
+    
+    IWishbone
+    #(
+        .AddressBusWidth(16),
+        .DataBusWidth(1)
+    )
+    IMapper();
 
+    (* dont_touch = "true" *) GBCMapper Mapper
+    (
+        .Clk(CoreClk),
+        .ClkEn(Ce),
+        .Reset(Reset),
+        .LoadImage(ILoadImage.Initiator),
+        .CartridgeRAM(IGBCartridgeRAM.Initiator),
+        
+        .MemoryBus(IMapper.Target)
+    );
     // Cartridge Controller is either pass-through or storage + mappers
-    GBCCartridgeController CartridgeController
+    (* dont_touch = "true" *) GBCCartridgeController CartridgeController
     (
         .Clk(CoreClk),
         .ClkEn(Ce),
 
-        // FIXME:  COMM
-        // FIXME:  Mapper
+        // FIXME:  COMM placeholder
+        .Comm(Console),
+        .Mapper(IMapper.Initiator),
 
         // Example:  Physical GamePak
         .GamePak(GamePak.Controller),
@@ -175,15 +226,20 @@ module RetroCoreShim
         .MemoryBus(GamePakFrontend.Target),
         .GamePakBus(GamePakBus.Controller)
     );
-    
-    GBCMemoryBus SystemBus
+
+    assign SystemBusFrontend.Address = Test.Address;
+    assign SystemBusFrontend.Access = Test.Access;
+    assign SystemBusFrontend.Write = Test.Write;  
+    (* dont_touch = "true" *) GBCMemoryBus SystemBus
     (
         .Clk(CoreClk),
         .ClkEn(Ce),
+        .Comm(Console), // FIXME:  COMM placeholder
         // System and video BRAMs
         .SystemRAM(IGBSystemRAM.Initiator),
         .VideoRAM(IGBVideoRAM.Initiator), // FIXME:  VRAM module must ignore system RAM stuff when accosted during PPU access
-        .Cartridge(GamePakFrontend.Initiator)
+        .Cartridge(GamePakFrontend.Initiator),
+        .MemoryBus(SystemBusFrontend.Target)
     );
     /*
     RetroMyCore TheCore
@@ -214,7 +270,7 @@ module RetroMisterGBCCore
     output logic [12:0] AV,
 
     // CPU memory bus, attached to the cartridge controller
-    IRetroMemoryPort.Initiator MemoryBus,
+    IWishbone.Initiator MemoryBus,
     // Other GamePak pins
     IGBCGamePakBus.GameBoy GamePak,
 

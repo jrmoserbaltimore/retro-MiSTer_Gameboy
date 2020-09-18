@@ -5,16 +5,16 @@
 // Game Boy Color GamePak interface
 interface IGBCGamePak
 (
+    output logic Clk,
+    output logic Write,
+    output logic Read,
+    output logic CS,
+    output logic [15:0] Address,
+    input logic [7:0] DFromPak,
+    output logic [7:0] DToPak,
+    output logic Reset,
+    input logic Audio
 );
-    logic Clk;
-    logic Write;
-    logic Read;
-    logic CS;
-    logic Address [15:0];
-    logic DFromPak [7:0];
-    logic DToPak [7:0];
-    logic Reset;
-    logic Audio;
 
     modport Controller
     (
@@ -32,11 +32,11 @@ endinterface
 
 interface IGBCGamePakBus
 (
-
+    logic CS,
+    logic Reset,
+    logic Audio
 );
-    logic CS;
-    logic Reset;
-    logic Audio;
+
     
     modport Controller
     (

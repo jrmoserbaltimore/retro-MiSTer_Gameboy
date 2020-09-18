@@ -88,7 +88,7 @@ module GBCVideoMemoryBus
             if (ReadOAM)
                 DataBuffer <= OAMData;
             else if (WriteOAM && !Mode[1])
-                OAM[MemoryBus.Address] <= MemoryBus.ToTarget;
+                OAM[MemoryBus.Address] <= MemoryBus.DToTarget;
         end else //if (AddressVRAM)
         begin
             // Always pass through unless mode is 3.  Return 0xff in mode 3.

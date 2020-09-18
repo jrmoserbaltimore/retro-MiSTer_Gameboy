@@ -7,7 +7,7 @@
 
 module GBCCartridgeController
 #(
-    parameter string DeviceType = "Xilinx",
+    parameter DeviceType = "Xilinx",
     parameter PowerDown = 1 // Set if the GamePak is powered down when not in use
 )
 (
@@ -40,8 +40,8 @@ module GBCCartridgeController
     assign Mapper.Access = MemoryBus.Access;
     assign Mapper.Mask = MemoryBus.Mask;
     assign Mapper.Write = MemoryBus.Write;
-    assign Mapper.Clk = Clk;
-    assign Mapper.ClkEn = ClkEn && !UseCartridge;
+    //assign Mapper.Clk = Clk;
+    //assign Mapper.ClkEn = ClkEn && !UseCartridge;
 
     generate
         if (PowerDown)
@@ -77,6 +77,7 @@ module GBCCartridgeController
         end
     endgenerate
 
+    //assign GamePakBus.Audio = GamePak.Audio;
     always_comb
     begin
         if (UseCartridge)
@@ -84,16 +85,13 @@ module GBCCartridgeController
             MemoryBus.DToInitiator = GamePak.DFromPak;
             MemoryBus.Ready = '1;
             MemoryBus.DataReady = '1;
-
-            GamePakBus.Audio = GamePak.Audio;
         end
         else
+        begin
             // Switch to mapper
             MemoryBus.DToInitiator = Mapper.DToInitiator;
             MemoryBus.Ready = Mapper.Ready;
             MemoryBus.DataReady = Mapper.DataReady;
-        begin
-            
         end
     end
 
