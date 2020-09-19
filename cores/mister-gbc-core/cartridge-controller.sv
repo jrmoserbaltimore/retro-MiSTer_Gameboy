@@ -17,11 +17,11 @@ module GBCCartridgeController
     // for save states and save RAM.
     IRetroComm.Target Comm,
     // Mapper for digital, GamePak for physical cartridge  
-    IRetroMemoryPort.Initiator Mapper,
+    IWishbone.Initiator Mapper,
     IGBCGamePak.Controller GamePak,
     
     // Expose to system bus
-    IRetroMemoryPort.Target MemoryBus,
+    IWishbone.Target MemoryBus,
     // expose to GBC Core ??? Or handle logic here?
     IGBCGamePakBus.Controller GamePakBus
 );

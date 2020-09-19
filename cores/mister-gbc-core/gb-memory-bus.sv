@@ -3,34 +3,60 @@
 // License:  MIT, see LICENSE.md
 //
 // This is a full CPU memory bus controller.
+//
+// Retro-GBC Registers:
+//  - Mapper Registers
+//    - $FEA0 MapperType
+//    - $FEA1 ROMSize
+//    - $FEA2 RAMSize
+//    - $FEA3 ROMBankMask[7:0]
+//    - $FEA4 ROMBankMask[8]
+//    - $FEA5 RAMBankMask[3:0]
+//    - $FEA6 Cartridge characteristics
+//      - .0 HasRAM
+//      - .1 HasBattery
+//      - .2 HasTimer
+//      - .3 HasRumble
+//      - .4 HasSensor
+//  - $FEA7 - Platform flag
+//    - Bit 0:  0=DMG, 1=GBC
+//    - Bit 1:  0=DMG compatibility, 1=GBC Only
+//    - Bit 2:  SGB
+// Areas to map:
+//   - Mapper
+//     - $0000-$7FFF
+//     - $A000-$BFFF
+//     - Registers $FEA0-$FEA6
+//   - Video
+//     - $8000-$9FFF (VRAM, with bank select bit)
+//     - $FE00-$FE9F (OAM)
+//     - Registers FF40-FF42, FF44-FF45, FF47-FF49, FF4A-FF4B
+//     - CGB Registers FF68-FF6C, FF70
+//   - Sound
+//     - Sound Channel Registers FF10-14, FF16-FF1E, FF20-FF26
+//     - Waveform Register FF30-3F
+//   - I/O
+//     - FF00 (Joystic)
+//     - FF01-FF02 (Serial I/O)
+//     - FF04-FF07 (Timer)
+//     - FF56 (IR port)
+// Internal areas:
+//   - Bank control
+//     - FF4F (CGB VRAM Bank)
+//     - FF70 (CGB WRAM Bank)
+//   - DMA
+//     - FF46 (OAM)
+//     - FF51-FF55 (CGB HDMA)
+//   - FF80-FFFE (HRAM)
+// Game Boy registers:
+//  - FFFF Interrupt Enable
+//  - FF0F Interrupt Flag
+//  - FF4D (Prepare speed switch)
 
-// TODO:  Figure how to share IO/HRAM/Interrupt with other modules:
-//     - HRAM is totally controlled here
-//     - Video RAM I/O registers belong to VRAM
-//       - FF40-FF42, FF44, FF45, FF47-FF4A
-//       - FF46 (OAM)
-//       - FF68-FF6A (CGB)
-//       - FF51-FF55 (CGB OAM)
-//       - FF4F (CGB VRAM Bank)
-//     - Sound
-//       - FF10-14, FF16-FF1E, FF20-FF26, FF30-3F
-//     - Joystick (here?)
-//       - FF00
-//     - Serial (I/O?)
-//       - FF01-FF02
-//     - Timer (not MBC3 RTC) (Here?)
-//       - FF04-FF07
-//     - Interrupt (Definitely needs to be in Gameboy)
-//       - FFFF Interrupt Enable
-//       - FF0F Interrupt Flag
-//     - GBC etc
-//       - FF4D Prepare speed switch (Gameboy reg)
-//       - FF56 IR port (I/O?)
-//       - FF6C obj prio mode (Video?)
-//       - FF70 WRAM bank (handled here)
 module GBCMemoryBus
 #(
-    parameter DeviceType = "Xilinx"
+    parameter DeviceType = "Xilinx",
+    parameter LowPower = 0
 )
 (
     IWishbone.SysCon SysCon,
@@ -48,13 +74,56 @@ module GBCMemoryBus
 );
 
     logic IsCGB;
-    logic ['hff00:'hffff][7:0] IOHRAM;
+    wire VRAMBank;
+    wire [2:0] WRAMBank;
+    wire [7:0] OAMDMA;
+    wire [15:0] HDMASource;
+    wire [12:0] HDMADest;
+    wire [6:0] HDMALength;
+    wire HDMAMode;
+    logic [7:0] HRAM ['h00:'hff];
 
-    wire AddressCart;
+    assign OAMDMA = HRAM['h46];
+    assign VRAMBank = HRAM['h4f][0];
+    assign HDMASource = {HRAM['h51], HRAM['h52][7:4], '0};
+    assign HDMADest = {HRAM['h53], HRAM['h54][7:4], '0};
+    assign HDMALength = HRAM['h55][6:0];
+    assign HDMAMode = HRAM['h55][7];
+    assign WRAMBank = HRAM['h70][2:0];
+
+    wire AddressMapper;
+    wire AddressIOHRAM;
     wire AddressVRAM;
     wire AddressWRAM;
     wire AddressOAM;
-    wire AddressIOHRAM;
+    wire i_valid;
+    
+    assign i_valid = MemoryBus.CYC && MemoryBus.STB;
+
+    assign AddressOAM = MemoryBus.ADDR[15:8] == 'hfe
+                     && MemoryBus.ADDR[7:5] != 'b101 // 0xa
+                     && MemoryBus.ADDR[7:6] != 'b11; // more than 0xa
+    // ==================================
+    // = Map VideoRAM to $8000 to $9FFF =
+    // ================================== 
+    // $FF4F [0] selects which bank
+    // 1000 0000 0000 0000
+    // 1001 1111 1111 1111
+    // VRAM and OAM are dual-port, accessible by the System Bus and the Video device concurrently.
+    // During access by the Video device in mode 2, Video sends CTG='b01 (OAM).  In mode 3, it sends
+    // it sends CTG='b11 (Video and OAM).
+    //
+    // The System Bus sendsn CTG='b1 during an OAM DMA, which overrides video access to OAM and
+    // causes blank lines to be drawn.  With HDMA, nothing special happens, aside from pausing the
+    // CPU during HDMA transfer.  The System Bus pauses the CPU by responding to an access request
+    // with RTY, which tells the Gameboy to continue stalling the CPU and to acknowledge a ClkEn
+    // rather than stalling.
+    assign AddressVRAM = MemoryBus.ADDR[15:13] == 'b100;
+
+    // VRAM Address:
+    // VRAMBank + ADDR[12:0]
+    assign AddressIOHRAM = MemoryBus.ADDR[15:8] == 'hff;
+    assign AddressWRAM = MemoryBus.ADDR[15:13] == 'b110;
     
     logic [7:0] DOutReg;
 
@@ -66,28 +135,11 @@ module GBCMemoryBus
     //   - $4000-$7FFF bank swap ROM
     //   - $A000-$BFFF 8k cartridge ram space
     // 3 inputs
-    assign AddressCart = MemoryBus.Address[15] == '0 || MemoryBus.Address[15:13] == 3'b101;
-
-    assign Cartridge.Access = AddressCart && MemoryBus.Access;
-    assign Cartridge.Write = AddressCart && MemoryBus.Write;
-    assign Cartridge.DToTarget = MemoryBus.DToTarget;
-
-    // ==================================
-    // = Map VideoRAM to $8000 to $9FFF =
-    // ================================== 
-    // $FF4F [0] selects which bank
-    // 1000 0000 0000 0000
-    // 1001 1111 1111 1111
-    // 3 inputs
-    assign AddressVRAM = (MemoryBus.Address[15:13] == 3'b100);
-    assign VideoRAM.Access = AddressVRAM && MemoryBus.Access;
-    assign VideoRAM.Write = AddressVRAM && MemoryBus.Write;
+    assign AddressMapper = !MemoryBus.ADDR[15] || MemoryBus.ADDR[15:13] == 'b101;
 
     // VRAM bank or OAM
-    assign VideoRAM.Address = AddressVRAM
-                            ? {2'b00, IOHRAM['hff4f][0] & IsCGB, MemoryBus.Address[12:0]}
-                            : MemoryBus.Address; 
-    assign VideoRAM.DToTarget = MemoryBus.DToTarget;
+    // VRAM address is always
+    // AddressOAM ? MemoryBus.ADDR : { 2'b00, VRAMBank, MemoryBus.ADDR[12:0] }
 
     // =======================================================
     // = Map SystemRAM to $C000 to $DFFF echo $E000 to $FDFF =
@@ -103,72 +155,54 @@ module GBCMemoryBus
     // 1101 0000 0000 0000
     // 1101 1111 1111 1111
 
-    // Have to skip OAM
-    // 7 inputs
-    assign AddressWRAM = (MemoryBus.Address[15:14] == 3'b11 && MemoryBus.Address[13:9] != 'b11111);
-
-    assign SystemRAM.Access = AddressWRAM && MemoryBus.Access;
-    assign SystemRAM.Write = AddressWRAM && MemoryBus.Write;
-
     // Banks are 4KiB, so the address for $D000-$DFFF is 12 bits plus the bank number at the top.
     // Bank select 0 puts bank 1 at $D000.
     // The bank select is $FF70 [2:0]
-    // 6 inputs
-    assign SystemRAM.Address[14:12] = (MemoryBus.Address[13:12] == 'b00) ? 'b00 : // Accessing the lower bank
-                                      (!IsCGB || IOHRAM['hff70][2:0] == 'b000) ? 'b01 : // 00 = bank 1, also Bank 1 on CGB
-                                      IOHRAM['hff70][2:0]; // Select from an upper bank on CGB
-    assign SystemRAM.Address[11:0] = MemoryBus.Address[11:0];
-    assign SystemRAM.DToTarget = MemoryBus.DToTarget;
+    // 2 inputs
+    // { (MemoryBus.ADDR[13:12] == 'b00) ? 'b00 : (WRAMBank || 'b00),
+    //   MemoryBus.ADDR[11:0] }
 
-    // $FE00-$FE9F OAM table
-    // $FF00-$FF7F I/O
-    // $FF80-$FFFE HRAM
-    //       $FFFF Interrupt register
-    // 10 inputs
-    assign AddressOAM = MemoryBus.Address[15:8] == 'hfe &&
-                       (MemoryBus.Address[7] == '0 || MemoryBus.Address[5] == 1'b0);
-    assign AddressIOHRAM = MemoryBus.Address[15:8] == 'hff;
-
-    always_comb
-    begin
-        if (AddressCart) // Cartridge
-        begin
-            MemoryBus.DToInitiator = Cartridge.DToInitiator;
-            MemoryBus.Ready = Cartridge.Ready;
-            MemoryBus.DataReady = Cartridge.DataReady;
-            // GamePakBus.Audio = ?;
-        end else if (AddressVRAM)
-        begin
-            // Gameboy talks to the VRAM now
-            MemoryBus.DToInitiator = VideoRAM.DToInitiator;
-            MemoryBus.Ready = VideoRAM.Ready;
-            MemoryBus.DataReady = VideoRAM.DataReady;
-        end else if (AddressWRAM)
-        begin
-            MemoryBus.DToInitiator = SystemRAM.DToInitiator;
-            MemoryBus.Ready = SystemRAM.Ready;
-            MemoryBus.DataReady = SystemRAM.DataReady;
-        end else if (AddressOAM)
-            // TODO:  OAM
-        begin
-        end else if (AddressIOHRAM)
-        begin
-            MemoryBus.Ready = '1;
-            MemoryBus.DataReady = '1;
-            MemoryBus.DToInitiator = IOHRAM[MemoryBus.Address];
-        end else begin
-            // Not implemented/accessible, ignore
-            MemoryBus.DToInitiator = '0;
-            MemoryBus.Ready = '1;
-            MemoryBus.DataReady = '1;
-        end
-    end
-    
     always_ff @(posedge SysCon.CLK)
     begin
-        // HRAM
-        if (AddressIOHRAM && MemoryBus.Write)
-            IOHRAM[MemoryBus.Address] <= MemoryBus.DToTarget;
+        if (SysCon.RST)
+        begin
+            // TODO:  Set all outgoing CYC to 0, drop all pending responses
+            SystemRAM.CYC <= '0;
+            VideORAM.CYC <= '0;
+            Cartridge.CYC <= '0;
+        end else if (i_valid && !MemoryBus.STALL)
+        begin
+            if (AddressMapper)
+            begin
+            end
+            if (AddressIOHRAM)
+            begin
+                if (MemoryBus.Address[7])
+                begin
+                    if (MemoryBus.WR) HRAM[MemoryBus.ADDR[7:0]] <= MemoryBus.DAT_ToTarget;
+                    // XXX:  Bus switch control here!
+                    MemoryBus.ACK <= '1;
+                    if (!LowPower || !MemoryBus.WR)
+                        MemoryBus.DAT_ToInitiator <= HRAM[MemoryBus.ADDR[7:0]];
+                end else case (MemoryBus.ADDR[6:0])
+                'h46, // OAM DMA
+                'h4f, // CGB VRAM Bank
+                'h51, // CGB HDMA
+                'h52,
+                'h53,
+                'h54,
+                'h55,
+                'h70: // WRAM Bank
+                    begin
+                        if (MemoryBus.WR) HRAM[MemoryBus.ADDR[7:0]] <= MemoryBus.DAT_ToTarget;
+                        // XXX:  Bus switch control here!
+                        MemoryBus.ACK <= '1;
+                        if (!LowPower || !MemoryBus.WR)
+                            MemoryBus.DAT_ToInitiator <= HRAM[MemoryBus.ADDR[7:0]];
+                    end
+                endcase
+            end
+        end
     end
 
 endmodule
