@@ -21,20 +21,19 @@ module RetroCoreShim
     parameter CoreClock = 200000000 // 200MHz FPGA core clock
 )
 (
-    // The console sends a core system clock (e.g. 200MHz) and a clock-enable to produce the
-    // console's reference clock.
-    input logic CoreClk, // Core system clock
+    // The console sends a core system clock (e.g. 200MHz) to produce the reference clock.
+    IWishbone.SysCon SysCon, // Core system clock
 
     // DDR System RAM or other large RAM.
-    // MainRAM should be DMA/IOMMU controlled, and the host must indicate the location of the load
-    // image. 
+
     IWishbone.Initiator MainRAM,
     // DDR, HyperRAM, or SRAM on the expansion bus
     IWishbone.Initiator ExpansionRAM0,
     IWishbone.Initiator ExpansionRAM1,
     IWishbone.Initiator ExpansionRAM2,
 
-    output logic [12:0] AV,  // AV
+    output logic [23:0] Video,
+    output logic [23:0] Audio, // 96kHz 24-bit, downsample to 48kHz 16-bit
     // ================
     // = External Bus =
     // ================
@@ -45,7 +44,6 @@ module RetroCoreShim
     output logic [68:0] CartridgeOut,
 
     // Controller I/O, from µC
-    input logic ControllerClk,
     input logic ControllerIn,
     output logic ControllerOut,
 
@@ -54,8 +52,7 @@ module RetroCoreShim
     output logic [31:0] ExpansionPortOut,
 
     // Console
-    IWishbone.Target Console,
-    IWishbone.Target Test // XXX: For synthesis test so we don't get culled.  REMOVZ
+    IWishbone.Target Host
 );
 
     wire Delay;

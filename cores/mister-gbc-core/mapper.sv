@@ -2,7 +2,7 @@
 // Copyright (c) 2020 Moonset Technologies, LLC
 // License:  MIT, see LICENSE.md
 //
-// Every Game Boy Color mapper implemented at once.
+// Every useful Game Boy Color mapper implemented at once.
 //
 // The LoadImage address bus is hard-coded to 23 bits or 8 megabytes, the largest game.
 //
@@ -37,9 +37,6 @@
 module GBCMapper
 (
     IWishbone.SysCon SysCon,
-    input logic Clk,
-    input logic ClkEn,
-    input logic Reset, // XXX
     // Pass caching modules for both of these.  CartridgeRAM can cache from DDR etc. (paging)
     // LoadImage and SystemRAM will incur delays fixed by CATC. 
     IWishbone.Initiator LoadImage,
@@ -115,11 +112,10 @@ module GBCMapper
     // ===========================
     // = Wishbone Bus Management =
     // ===========================
-    logic InitCycle;
     logic BusSwitch;
     logic BusSwitchRegister;
     logic [7:0] RegisterReadBuffer;
-    logic BusSwitchPendingBus; // if not register read, 0 = ROM 1 = RAM
+    //logic BusSwitchPendingBus; // if not register read, 0 = ROM 1 = RAM
     logic [4:0] OutstandingTransactions;
     // Must only assign to output when not sending a STALL signal.
     // Must receive any input appearing on a clock cycle when a STALL is NOT sent.
@@ -143,7 +139,6 @@ module GBCMapper
             LoadImage.CYC <= '0;
             CartridgeRAM.CYC <= '0;
             BusSwitch <= '0;
-            InitCycle <= SysCon.RST;
         end else if (BusSwitch && !OutstandingTransactions) // STALL with no pending transactions
         begin
             // Register writes always complete immediately with no feedback except the ACK, so just
@@ -206,8 +201,8 @@ module GBCMapper
             // ===================================
             // = Mapper internal register access =
             // ===================================
-            // No-op outside InitCycle; reads always ignored
-            if (InitCycle && (MemoryBus.ADDR[15:8] == 'hfe) && MemoryBus.WE)
+            // System bus filters these out when boot ROM is closed; reads always ignored
+            if ((MemoryBus.ADDR[15:8] == 'hfe) && MemoryBus.WE)
             begin
                 // Sets up the registers.  Writing non-zero to $FE50 locks these until reset
                 if (MemoryBus.ADDR[7:4] == 'ha)
@@ -227,8 +222,6 @@ module GBCMapper
                     'h6:
                         CartFeatures <= MemoryBus.DAT_ToTarget[4:0];
                 endcase
-                else if (MemoryBus.ADDR[7:0] == 'h50) // Final step in boot rom, lock registers
-                    InitCycle <= !MemoryBus.DAT_ToTarget;
             end
             // ==========================
             // = Mapper register access =

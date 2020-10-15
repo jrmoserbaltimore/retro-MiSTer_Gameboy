@@ -4,6 +4,14 @@
 //
 // This is a full CPU memory bus controller.
 //
+// HRAM etc:
+//   GameBoy->SystemBus (2 clock)
+// Video:
+//   GameBoy->SystemBus->Video (5 clock)
+// Cartridge:
+//  Gameboy->SystemBus->Mapper->Cache/BRAM (7 clock)
+//
+//
 // Retro-GBC Registers:
 //  - Mapper Registers
 //    - $FEA0 MapperType
@@ -26,7 +34,7 @@
 //   - Mapper
 //     - $0000-$7FFF
 //     - $A000-$BFFF
-//     - Registers $FEA0-$FEA6
+//     - Retro Registers $FEA0-$FEA6
 //   - Video
 //     - $8000-$9FFF (VRAM, with bank select bit)
 //     - $FE00-$FE9F (OAM)
@@ -52,7 +60,12 @@
 //  - FFFF Interrupt Enable
 //  - FF0F Interrupt Flag
 //  - FF4D (Prepare speed switch)
-
+//  - FF50 Exit Boot ROM
+//
+// TODO:
+//   - Implement DMA
+//   - Gameboy Color detection
+//   - LCD interrupt?
 module GBCMemoryBus
 #(
     parameter DeviceType = "Xilinx",
@@ -80,6 +93,7 @@ module GBCMemoryBus
     wire [15:0] HDMASource;
     wire [12:0] HDMADest;
     wire [6:0] HDMALength;
+    wire InitCycle;
     wire HDMAMode;
     logic [7:0] HRAM ['h00:'hff];
 
@@ -90,13 +104,18 @@ module GBCMemoryBus
     assign HDMALength = HRAM['h55][6:0];
     assign HDMAMode = HRAM['h55][7];
     assign WRAMBank = HRAM['h70][2:0];
+    assign InitCycle = !HRAM['h50];
 
     wire AddressMapper;
     wire AddressIOHRAM;
     wire AddressVRAM;
     wire AddressWRAM;
     wire AddressOAM;
+    wire AddressRetroRegs;
     wire i_valid;
+    
+    // $fea0..$fea7
+    assign AddressRetroRegs = MemoryBus.ADDR[15:8] == 'hfea && !MemoryBus.ADDR[3];
     
     assign i_valid = MemoryBus.CYC && MemoryBus.STB;
 
@@ -123,6 +142,7 @@ module GBCMemoryBus
     // VRAM Address:
     // VRAMBank + ADDR[12:0]
     assign AddressIOHRAM = MemoryBus.ADDR[15:8] == 'hff;
+    assign AddressBootEnd = AddressIOHRAM && MemoryBus.ADDR[7:0] == 'h50;
     assign AddressWRAM = MemoryBus.ADDR[15:13] == 'b110;
     
     logic [7:0] DOutReg;
@@ -162,28 +182,91 @@ module GBCMemoryBus
     // { (MemoryBus.ADDR[13:12] == 'b00) ? 'b00 : (WRAMBank || 'b00),
     //   MemoryBus.ADDR[11:0] }
 
+    logic BusSwitch;
+    wire BusSwitchRegister;
+    wire BusSwitchSystemRAM;
+    wire BusSwitchVideoRAM;
+    wire BusSwitchCartridge;
+    logic [7:0] RegisterReadBuffer;
+    logic [3:0] BusSwitchPendingBus;
+    logic [4:0] OutstandingTransactions;
+    
+    assign BusSwitchRegister = BusSwitchPendingBus[0];
+    assign BusSwitchSystemRAM = BusSwitchPendingBus[1];
+    assign BusSwitchVideoRAM = BusSwitchPendingBus[2];
+    assign BusSwitchCartridge = BusSwitchPendingBus[3];
+
+    // Stall if either bus is stalling, Initiator changed buses, or we can't count more pending ACKs.
+    // Better have a skid buffer.
+    assign MemoryBus.STALL = SystemRAM.STALL || VideoRAM.STALL || Cartridge.STALL || BusSwitch
+                            || &OutstandingTransactions;
+
     always_ff @(posedge SysCon.CLK)
     begin
+        var int DeltaOT;
         if (SysCon.RST)
         begin
-            // TODO:  Set all outgoing CYC to 0, drop all pending responses
+            // Set all outgoing CYC to 0, drop all pending responses
             SystemRAM.CYC <= '0;
-            VideORAM.CYC <= '0;
+            VideoRAM.CYC <= '0;
             Cartridge.CYC <= '0;
+        end else if (BusSwitch && !OutstandingTransactions) // STALL with no pending transactions
+        begin
+            // if it was a register access, just ACK and load memory
+            MemoryBus.ACK <= BusSwitchRegister;
+            MemoryBus.ERR <= '0;
+            MemoryBus.RTY <= '0;
+            MemoryBus.DAT_ToInitiator <= RegisterReadBuffer;
+            // Else strobe the correct bus
+            if (!BusSwitchRegister)
+            begin
+                SystemRAM.CYC <= BusSwitchSystemRAM;
+                SystemRAM.STB <= BusSwitchSystemRAM;
+                VideoRAM.CYC <= BusSwitchVideoRAM;
+                VideoRAM.STB <= BusSwitchVideoRAM;
+                Cartridge.CYC <= BusSwitchCartridge;
+                Cartridge.STB <= BusSwitchCartridge;
+                DeltaOT += 1;
+            end
+
+            // Done here
+            BusSwitch <= '0;
         end else if (i_valid && !MemoryBus.STALL)
         begin
-            if (AddressMapper)
+            if (AddressMapper ||(InitCycle && AddressRetroRegs))
             begin
+                // Switch to cartridge bus
+                BusSwitch <= !Cartridge.CYC;
+                BusSwitchPendingBus <= 'b1000;
+                if (!(SystemRAM.CYC || VideoRAM.CYC || Cartridge.CYC))
+                begin
+                    Cartridge.CYC <= '1;
+                    Cartridge.STB <= '1;
+                    DeltaOT += 1;
+                end
+                Cartridge.ADDR <= MemoryBus.ADDR;
+                Cartridge.WE <= MemoryBus.WE;
             end
             if (AddressIOHRAM)
             begin
-                if (MemoryBus.Address[7])
+                if (MemoryBus.ADDR[7])
                 begin
-                    if (MemoryBus.WR) HRAM[MemoryBus.ADDR[7:0]] <= MemoryBus.DAT_ToTarget;
-                    // XXX:  Bus switch control here!
-                    MemoryBus.ACK <= '1;
-                    if (!LowPower || !MemoryBus.WR)
+                    // Place HRAM directly
+                    //BusSwitch <= |OutstandingTransactions;
+                    BusSwitch <= SystemRAM.CYC || VideoRAM.CYC || Cartridge.CYC; 
+                    BusSwitchPendingBus <= 'b0001; // Register
+
+                    // Store immediately
+                    if (MemoryBus.WE) HRAM[MemoryBus.ADDR[7:0]] <= MemoryBus.DAT_ToTarget;
+                    // ACK immediately and return data if nothing else is going on
+                    if (!(SystemRAM.CYC || VideoRAM.CYC || Cartridge.CYC))
+                    begin
+                        MemoryBus.ACK <= '1;
                         MemoryBus.DAT_ToInitiator <= HRAM[MemoryBus.ADDR[7:0]];
+                    end
+                    // Store into the buffer in any case, unless low power
+                    if (!LowPower || SystemRAM.CYC || VideoRAM.CYC || Cartridge.CYC)
+                        RegisterReadBuffer <= HRAM[MemoryBus.ADDR[7:0]];
                 end else case (MemoryBus.ADDR[6:0])
                 'h46, // OAM DMA
                 'h4f, // CGB VRAM Bank
@@ -194,11 +277,23 @@ module GBCMemoryBus
                 'h55,
                 'h70: // WRAM Bank
                     begin
-                        if (MemoryBus.WR) HRAM[MemoryBus.ADDR[7:0]] <= MemoryBus.DAT_ToTarget;
-                        // XXX:  Bus switch control here!
-                        MemoryBus.ACK <= '1;
-                        if (!LowPower || !MemoryBus.WR)
+                        // XXX: Duplicate code
+                        // Place HRAM directly
+                        //BusSwitch <= |OutstandingTransactions;
+                        BusSwitch <= SystemRAM.CYC || VideoRAM.CYC || Cartridge.CYC; 
+                        BusSwitchPendingBus <= 'b0001; // Register
+    
+                        // Store immediately
+                        if (MemoryBus.WE) HRAM[MemoryBus.ADDR[7:0]] <= MemoryBus.DAT_ToTarget;
+                        // ACK immediately and return data if nothing else is going on
+                        if (!(SystemRAM.CYC || VideoRAM.CYC || Cartridge.CYC))
+                        begin
+                            MemoryBus.ACK <= '1;
                             MemoryBus.DAT_ToInitiator <= HRAM[MemoryBus.ADDR[7:0]];
+                        end
+                        // Store into the buffer in any case, unless low power
+                        if (!LowPower || SystemRAM.CYC || VideoRAM.CYC || Cartridge.CYC)
+                            RegisterReadBuffer <= HRAM[MemoryBus.ADDR[7:0]];
                     end
                 endcase
             end
