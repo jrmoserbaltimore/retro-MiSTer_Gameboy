@@ -1,0 +1,332 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<wave_config>
+   <wave_state>
+   </wave_state>
+   <db_ref_list>
+      <db_ref path="TestSystemBus_behav.wdb" id="1">
+         <top_modules>
+            <top_module name="TestSystemBus" />
+            <top_module name="glbl" />
+         </top_modules>
+      </db_ref>
+   </db_ref_list>
+   <zoom_setting>
+      <ZoomStartTime time="2577438fs"></ZoomStartTime>
+      <ZoomEndTime time="2850513fs"></ZoomEndTime>
+      <Cursor1Time time="2805000fs"></Cursor1Time>
+   </zoom_setting>
+   <column_width_setting>
+      <NameColumnWidth column_width="175"></NameColumnWidth>
+      <ValueColumnWidth column_width="114"></ValueColumnWidth>
+   </column_width_setting>
+   <WVObjectSize size="4" />
+   <wvobject fp_name="/TestSystemBus/clk" type="logic">
+      <obj_property name="ElementShortName">clk</obj_property>
+      <obj_property name="ObjectShortName">clk</obj_property>
+   </wvobject>
+   <wvobject fp_name="/TestSystemBus/reset" type="logic">
+      <obj_property name="ElementShortName">reset</obj_property>
+      <obj_property name="ObjectShortName">reset</obj_property>
+   </wvobject>
+   <wvobject fp_name="/TestSystemBus/counter" type="array">
+      <obj_property name="ElementShortName">counter[6:0]</obj_property>
+      <obj_property name="ObjectShortName">counter[6:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="group5" type="group">
+      <obj_property name="label">System Bus</obj_property>
+      <obj_property name="DisplayName">label</obj_property>
+      <obj_property name="isExpanded"></obj_property>
+      <wvobject fp_name="group24" type="group">
+         <obj_property name="label">Input</obj_property>
+         <obj_property name="DisplayName">label</obj_property>
+         <obj_property name="isExpanded"></obj_property>
+         <wvobject fp_name="/TestSystemBus/SystemBus/SysCon/CLK" type="logic">
+            <obj_property name="ElementShortName">CLK</obj_property>
+            <obj_property name="ObjectShortName">CLK</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/SystemBus/SysCon/RST" type="logic">
+            <obj_property name="ElementShortName">RST</obj_property>
+            <obj_property name="ObjectShortName">RST</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/SystemBus/MemoryBus/DAT_ToInitiator" type="array">
+            <obj_property name="ElementShortName">DAT_ToInitiator[7:0]</obj_property>
+            <obj_property name="ObjectShortName">DAT_ToInitiator[7:0]</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/SystemBus/MemoryBus/DAT_ToTarget" type="array">
+            <obj_property name="ElementShortName">DAT_ToTarget[7:0]</obj_property>
+            <obj_property name="ObjectShortName">DAT_ToTarget[7:0]</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/SystemBus/MemoryBus/TGD_ToInitiator" type="array">
+            <obj_property name="ElementShortName">TGD_ToInitiator[0:0]</obj_property>
+            <obj_property name="ObjectShortName">TGD_ToInitiator[0:0]</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/SystemBus/MemoryBus/TGD_ToTarget" type="array">
+            <obj_property name="ElementShortName">TGD_ToTarget[0:0]</obj_property>
+            <obj_property name="ObjectShortName">TGD_ToTarget[0:0]</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/SystemBus/MemoryBus/CYC" type="logic">
+            <obj_property name="ElementShortName">CYC</obj_property>
+            <obj_property name="ObjectShortName">CYC</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/SystemBus/MemoryBus/STB" type="logic">
+            <obj_property name="ElementShortName">STB</obj_property>
+            <obj_property name="ObjectShortName">STB</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/SystemBus/MemoryBus/LOCK" type="logic">
+            <obj_property name="ElementShortName">LOCK</obj_property>
+            <obj_property name="ObjectShortName">LOCK</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/SystemBus/MemoryBus/ADDR" type="array">
+            <obj_property name="ElementShortName">ADDR[15:0]</obj_property>
+            <obj_property name="ObjectShortName">ADDR[15:0]</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/SystemBus/MemoryBus/SEL" type="array">
+            <obj_property name="ElementShortName">SEL[0:0]</obj_property>
+            <obj_property name="ObjectShortName">SEL[0:0]</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/SystemBus/MemoryBus/WE" type="logic">
+            <obj_property name="ElementShortName">WE</obj_property>
+            <obj_property name="ObjectShortName">WE</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/SystemBus/MemoryBus/TGA" type="array">
+            <obj_property name="ElementShortName">TGA[0:0]</obj_property>
+            <obj_property name="ObjectShortName">TGA[0:0]</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/SystemBus/MemoryBus/TGC" type="array">
+            <obj_property name="ElementShortName">TGC[0:0]</obj_property>
+            <obj_property name="ObjectShortName">TGC[0:0]</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/SystemBus/MemoryBus/CTI" type="array">
+            <obj_property name="ElementShortName">CTI[2:0]</obj_property>
+            <obj_property name="ObjectShortName">CTI[2:0]</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/SystemBus/MemoryBus/BTE" type="array">
+            <obj_property name="ElementShortName">BTE[1:0]</obj_property>
+            <obj_property name="ObjectShortName">BTE[1:0]</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/SystemBus/MemoryBus/ACK" type="logic">
+            <obj_property name="ElementShortName">ACK</obj_property>
+            <obj_property name="ObjectShortName">ACK</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/SystemBus/MemoryBus/ERR" type="logic">
+            <obj_property name="ElementShortName">ERR</obj_property>
+            <obj_property name="ObjectShortName">ERR</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/SystemBus/MemoryBus/RTY" type="logic">
+            <obj_property name="ElementShortName">RTY</obj_property>
+            <obj_property name="ObjectShortName">RTY</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/SystemBus/MemoryBus/STALL" type="logic">
+            <obj_property name="ElementShortName">STALL</obj_property>
+            <obj_property name="ObjectShortName">STALL</obj_property>
+         </wvobject>
+      </wvobject>
+      <wvobject fp_name="/TestSystemBus/SystemBus/HRAM" type="array">
+         <obj_property name="ElementShortName">HRAM[0:255][7:0]</obj_property>
+         <obj_property name="ObjectShortName">HRAM[0:255][7:0]</obj_property>
+      </wvobject>
+      <wvobject fp_name="/TestSystemBus/SystemBus/VRAMBank" type="logic">
+         <obj_property name="ElementShortName">VRAMBank</obj_property>
+         <obj_property name="ObjectShortName">VRAMBank</obj_property>
+      </wvobject>
+      <wvobject fp_name="/TestSystemBus/SystemBus/WRAMBank" type="array">
+         <obj_property name="ElementShortName">WRAMBank[2:0]</obj_property>
+         <obj_property name="ObjectShortName">WRAMBank[2:0]</obj_property>
+      </wvobject>
+      <wvobject fp_name="/TestSystemBus/SystemBus/InitCycle" type="logic">
+         <obj_property name="ElementShortName">InitCycle</obj_property>
+         <obj_property name="ObjectShortName">InitCycle</obj_property>
+      </wvobject>
+      <wvobject fp_name="group36" type="group">
+         <obj_property name="label">Address Target</obj_property>
+         <obj_property name="DisplayName">label</obj_property>
+         <obj_property name="isExpanded"></obj_property>
+         <wvobject fp_name="/TestSystemBus/SystemBus/AddressCartridge" type="logic">
+            <obj_property name="ElementShortName">AddressCartridge</obj_property>
+            <obj_property name="ObjectShortName">AddressCartridge</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/SystemBus/AddressIOHRAM" type="logic">
+            <obj_property name="ElementShortName">AddressIOHRAM</obj_property>
+            <obj_property name="ObjectShortName">AddressIOHRAM</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/SystemBus/AddressVRAM" type="logic">
+            <obj_property name="ElementShortName">AddressVRAM</obj_property>
+            <obj_property name="ObjectShortName">AddressVRAM</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/SystemBus/AddressWRAM" type="logic">
+            <obj_property name="ElementShortName">AddressWRAM</obj_property>
+            <obj_property name="ObjectShortName">AddressWRAM</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/SystemBus/AddressOAM" type="logic">
+            <obj_property name="ElementShortName">AddressOAM</obj_property>
+            <obj_property name="ObjectShortName">AddressOAM</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/SystemBus/AddressRetroRegs" type="logic">
+            <obj_property name="ElementShortName">AddressRetroRegs</obj_property>
+            <obj_property name="ObjectShortName">AddressRetroRegs</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/SystemBus/AddressEcho" type="logic">
+            <obj_property name="ElementShortName">AddressEcho</obj_property>
+            <obj_property name="ObjectShortName">AddressEcho</obj_property>
+         </wvobject>
+      </wvobject>
+      <wvobject fp_name="/TestSystemBus/SystemBus/WRAMAddress" type="array">
+         <obj_property name="ElementShortName">WRAMAddress[13:0]</obj_property>
+         <obj_property name="ObjectShortName">WRAMAddress[13:0]</obj_property>
+      </wvobject>
+      <wvobject fp_name="group331" type="group">
+         <obj_property name="label">i_Cartridge</obj_property>
+         <obj_property name="DisplayName">label</obj_property>
+         <obj_property name="isExpanded"></obj_property>
+         <wvobject fp_name="/TestSystemBus/i_Cartridge/CLK" type="logic">
+            <obj_property name="ElementShortName">CLK</obj_property>
+            <obj_property name="ObjectShortName">CLK</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/i_Cartridge/RST" type="logic">
+            <obj_property name="ElementShortName">RST</obj_property>
+            <obj_property name="ObjectShortName">RST</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/i_Cartridge/DAT_ToInitiator" type="array">
+            <obj_property name="ElementShortName">DAT_ToInitiator[7:0]</obj_property>
+            <obj_property name="ObjectShortName">DAT_ToInitiator[7:0]</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/i_Cartridge/DAT_ToTarget" type="array">
+            <obj_property name="ElementShortName">DAT_ToTarget[7:0]</obj_property>
+            <obj_property name="ObjectShortName">DAT_ToTarget[7:0]</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/i_Cartridge/TGD_ToInitiator" type="array">
+            <obj_property name="ElementShortName">TGD_ToInitiator[0:0]</obj_property>
+            <obj_property name="ObjectShortName">TGD_ToInitiator[0:0]</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/i_Cartridge/TGD_ToTarget" type="array">
+            <obj_property name="ElementShortName">TGD_ToTarget[0:0]</obj_property>
+            <obj_property name="ObjectShortName">TGD_ToTarget[0:0]</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/i_Cartridge/ACK" type="logic">
+            <obj_property name="ElementShortName">ACK</obj_property>
+            <obj_property name="ObjectShortName">ACK</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/i_Cartridge/ADDR" type="array">
+            <obj_property name="ElementShortName">ADDR[15:0]</obj_property>
+            <obj_property name="ObjectShortName">ADDR[15:0]</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/i_Cartridge/CYC" type="logic">
+            <obj_property name="ElementShortName">CYC</obj_property>
+            <obj_property name="ObjectShortName">CYC</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/i_Cartridge/STB" type="logic">
+            <obj_property name="ElementShortName">STB</obj_property>
+            <obj_property name="ObjectShortName">STB</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/i_Cartridge/STALL" type="logic">
+            <obj_property name="ElementShortName">STALL</obj_property>
+            <obj_property name="ObjectShortName">STALL</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/i_Cartridge/ForceStall" type="logic">
+            <obj_property name="ElementShortName">ForceStall</obj_property>
+            <obj_property name="ObjectShortName">ForceStall</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/i_Cartridge/InternalStall" type="logic">
+            <obj_property name="ElementShortName">InternalStall</obj_property>
+            <obj_property name="ObjectShortName">InternalStall</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/i_Cartridge/ERR" type="logic">
+            <obj_property name="ElementShortName">ERR</obj_property>
+            <obj_property name="ObjectShortName">ERR</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/i_Cartridge/LOCK" type="logic">
+            <obj_property name="ElementShortName">LOCK</obj_property>
+            <obj_property name="ObjectShortName">LOCK</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/i_Cartridge/RTY" type="logic">
+            <obj_property name="ElementShortName">RTY</obj_property>
+            <obj_property name="ObjectShortName">RTY</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/i_Cartridge/SEL" type="array">
+            <obj_property name="ElementShortName">SEL[0:0]</obj_property>
+            <obj_property name="ObjectShortName">SEL[0:0]</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/i_Cartridge/TGA" type="array">
+            <obj_property name="ElementShortName">TGA[0:0]</obj_property>
+            <obj_property name="ObjectShortName">TGA[0:0]</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/i_Cartridge/TGC" type="array">
+            <obj_property name="ElementShortName">TGC[0:0]</obj_property>
+            <obj_property name="ObjectShortName">TGC[0:0]</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/i_Cartridge/WE" type="logic">
+            <obj_property name="ElementShortName">WE</obj_property>
+            <obj_property name="ObjectShortName">WE</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/i_Cartridge/CTI" type="array">
+            <obj_property name="ElementShortName">CTI[2:0]</obj_property>
+            <obj_property name="ObjectShortName">CTI[2:0]</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/i_Cartridge/BTE" type="array">
+            <obj_property name="ElementShortName">BTE[1:0]</obj_property>
+            <obj_property name="ObjectShortName">BTE[1:0]</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/i_Cartridge/AddressWidth" type="array">
+            <obj_property name="ElementShortName">AddressWidth[31:0]</obj_property>
+            <obj_property name="ObjectShortName">AddressWidth[31:0]</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/i_Cartridge/DataWidth" type="array">
+            <obj_property name="ElementShortName">DataWidth[31:0]</obj_property>
+            <obj_property name="ObjectShortName">DataWidth[31:0]</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/i_Cartridge/Granularity" type="array">
+            <obj_property name="ElementShortName">Granularity[31:0]</obj_property>
+            <obj_property name="ObjectShortName">Granularity[31:0]</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/i_Cartridge/TGDWidth" type="array">
+            <obj_property name="ElementShortName">TGDWidth[31:0]</obj_property>
+            <obj_property name="ObjectShortName">TGDWidth[31:0]</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/i_Cartridge/TGAWidth" type="array">
+            <obj_property name="ElementShortName">TGAWidth[31:0]</obj_property>
+            <obj_property name="ObjectShortName">TGAWidth[31:0]</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/i_Cartridge/TGCWidth" type="array">
+            <obj_property name="ElementShortName">TGCWidth[31:0]</obj_property>
+            <obj_property name="ObjectShortName">TGCWidth[31:0]</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/i_Cartridge/SELWidth" type="array">
+            <obj_property name="ElementShortName">SELWidth[31:0]</obj_property>
+            <obj_property name="ObjectShortName">SELWidth[31:0]</obj_property>
+         </wvobject>
+      </wvobject>
+      <wvobject fp_name="group338" type="group">
+         <obj_property name="label">State</obj_property>
+         <obj_property name="DisplayName">label</obj_property>
+         <obj_property name="isExpanded"></obj_property>
+         <wvobject fp_name="/TestSystemBus/SystemBus/RequestOutstanding" type="array">
+            <obj_property name="ElementShortName">RequestOutstanding[1:0]</obj_property>
+            <obj_property name="ObjectShortName">RequestOutstanding[1:0]</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/SystemBus/OAMDMA" type="array">
+            <obj_property name="ElementShortName">OAMDMA[7:0]</obj_property>
+            <obj_property name="ObjectShortName">OAMDMA[7:0]</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/SystemBus/HDMAActive" type="logic">
+            <obj_property name="ElementShortName">HDMAActive</obj_property>
+            <obj_property name="ObjectShortName">HDMAActive</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/SystemBus/HDMAMode" type="logic">
+            <obj_property name="ElementShortName">HDMAMode</obj_property>
+            <obj_property name="ObjectShortName">HDMAMode</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/SystemBus/DMAActive" type="logic">
+            <obj_property name="ElementShortName">DMAActive</obj_property>
+            <obj_property name="ObjectShortName">DMAActive</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/SystemBus/DMACount" type="array">
+            <obj_property name="ElementShortName">DMACount[7:0]</obj_property>
+            <obj_property name="ObjectShortName">DMACount[7:0]</obj_property>
+         </wvobject>
+         <wvobject fp_name="/TestSystemBus/SystemBus/DMACycles" type="array">
+            <obj_property name="ElementShortName">DMACycles[7:0]</obj_property>
+            <obj_property name="ObjectShortName">DMACycles[7:0]</obj_property>
+         </wvobject>
+      </wvobject>
+   </wvobject>
+</wave_config>

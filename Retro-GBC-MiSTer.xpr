@@ -27,7 +27,8 @@
     <Option Name="SimulatorLanguage" Val="Verilog"/>
     <Option Name="BoardPart" Val=""/>
     <Option Name="BoardPartRepoPaths" Val="$PPRDIR/../../../../../AppData/Roaming/Xilinx/Vivado/2019.2/xhub/board_store"/>
-    <Option Name="ActiveSimSet" Val="Infrastructure_Simulation"/>
+    <Option Name="SourceMgmtMode" Val="DisplayOnly"/>
+    <Option Name="ActiveSimSet" Val="System_Bus_Simulation"/>
     <Option Name="DefaultLib" Val="retro_mister_gbc"/>
     <Option Name="ProjectType" Val="Default"/>
     <Option Name="IPOutputRepo" Val="$PCACHEDIR/ip"/>
@@ -40,7 +41,7 @@
     <Option Name="IPStaticSourceDir" Val="$PIPUSERFILESDIR/ipstatic"/>
     <Option Name="EnableBDX" Val="FALSE"/>
     <Option Name="DSABoardId" Val="arty-z7-20"/>
-    <Option Name="WTXSimLaunchSim" Val="154"/>
+    <Option Name="WTXSimLaunchSim" Val="275"/>
     <Option Name="WTModelSimLaunchSim" Val="0"/>
     <Option Name="WTQuestaLaunchSim" Val="0"/>
     <Option Name="WTIesLaunchSim" Val="0"/>
@@ -81,19 +82,18 @@
         <FileInfo>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
+          <Attr Name="UsedIn" Val="simulation"/>
         </FileInfo>
       </File>
       <File Path="$PPRDIR/retro/modules/wishbone-modules/rtl/bram.sv">
         <FileInfo>
           <Attr Name="Library" Val="mst_retro1"/>
-          <Attr Name="AutoDisabled" Val="1"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
         </FileInfo>
       </File>
       <File Path="$PPRDIR/cores/mister-gbc-core/cartridge-controller.sv">
         <FileInfo>
-          <Attr Name="AutoDisabled" Val="1"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
         </FileInfo>
@@ -101,7 +101,6 @@
       <File Path="$PPRDIR/retro/Retro-1.sources/infrastructure/catc.sv">
         <FileInfo>
           <Attr Name="Library" Val="mst_retro1"/>
-          <Attr Name="AutoDisabled" Val="1"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
           <Attr Name="UsedIn" Val="simulation"/>
@@ -109,7 +108,6 @@
       </File>
       <File Path="$PPRDIR/cores/mister-gbc-core/gamepak.sv">
         <FileInfo>
-          <Attr Name="AutoDisabled" Val="1"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
           <Attr Name="UsedIn" Val="simulation"/>
@@ -117,7 +115,6 @@
       </File>
       <File Path="$PPRDIR/cores/mister-gbc-core/mapper.sv">
         <FileInfo>
-          <Attr Name="AutoDisabled" Val="1"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
         </FileInfo>
@@ -125,7 +122,6 @@
       <File Path="$PPRDIR/retro/Retro-1.sources/infrastructure/retrocomm.sv">
         <FileInfo>
           <Attr Name="Library" Val="mst_retro1"/>
-          <Attr Name="AutoDisabled" Val="1"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
           <Attr Name="UsedIn" Val="simulation"/>
@@ -133,55 +129,6 @@
       </File>
       <File Path="$PPRDIR/cores/mister-gbc-core/mister-gbc-shim.sv">
         <FileInfo>
-          <Attr Name="AutoDisabled" Val="1"/>
-          <Attr Name="UsedIn" Val="synthesis"/>
-          <Attr Name="UsedIn" Val="implementation"/>
-        </FileInfo>
-      </File>
-      <File Path="$PPRDIR/cores/MiSTer/GameboyColor/rtl/hdma.v">
-        <FileInfo>
-          <Attr Name="Library" Val="mister_gameboy"/>
-          <Attr Name="AutoDisabled" Val="1"/>
-          <Attr Name="UsedIn" Val="synthesis"/>
-          <Attr Name="UsedIn" Val="implementation"/>
-        </FileInfo>
-      </File>
-      <File Path="$PPRDIR/cores/MiSTer/GameboyColor/rtl/lcd.v">
-        <FileInfo>
-          <Attr Name="Library" Val="mister_gameboy"/>
-          <Attr Name="AutoDisabled" Val="1"/>
-          <Attr Name="UsedIn" Val="synthesis"/>
-          <Attr Name="UsedIn" Val="implementation"/>
-        </FileInfo>
-      </File>
-      <File Path="$PPRDIR/cores/MiSTer/GameboyColor/rtl/link.v">
-        <FileInfo>
-          <Attr Name="Library" Val="mister_gameboy"/>
-          <Attr Name="AutoDisabled" Val="1"/>
-          <Attr Name="UsedIn" Val="synthesis"/>
-          <Attr Name="UsedIn" Val="implementation"/>
-        </FileInfo>
-      </File>
-      <File Path="$PPRDIR/cores/MiSTer/GameboyColor/rtl/sgb.v">
-        <FileInfo>
-          <Attr Name="Library" Val="mister_gameboy"/>
-          <Attr Name="AutoDisabled" Val="1"/>
-          <Attr Name="UsedIn" Val="synthesis"/>
-          <Attr Name="UsedIn" Val="implementation"/>
-        </FileInfo>
-      </File>
-      <File Path="$PPRDIR/cores/MiSTer/GameboyColor/rtl/sprites.v">
-        <FileInfo>
-          <Attr Name="Library" Val="mister_gameboy"/>
-          <Attr Name="AutoDisabled" Val="1"/>
-          <Attr Name="UsedIn" Val="synthesis"/>
-          <Attr Name="UsedIn" Val="implementation"/>
-        </FileInfo>
-      </File>
-      <File Path="$PPRDIR/cores/MiSTer/GameboyColor/rtl/timer.v">
-        <FileInfo>
-          <Attr Name="Library" Val="mister_gameboy"/>
-          <Attr Name="AutoDisabled" Val="1"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
         </FileInfo>
@@ -189,7 +136,6 @@
       <File Path="$PPRDIR/cores/MiSTer/brNX-tv80/rtl/tv80/tv80_alu.v">
         <FileInfo>
           <Attr Name="Library" Val="tv80"/>
-          <Attr Name="AutoDisabled" Val="1"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
           <Attr Name="UsedIn" Val="simulation"/>
@@ -198,7 +144,6 @@
       <File Path="$PPRDIR/cores/MiSTer/brNX-tv80/rtl/tv80/tv80_core.v">
         <FileInfo>
           <Attr Name="Library" Val="tv80"/>
-          <Attr Name="AutoDisabled" Val="1"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
           <Attr Name="UsedIn" Val="simulation"/>
@@ -207,7 +152,6 @@
       <File Path="$PPRDIR/cores/MiSTer/brNX-tv80/rtl/tv80/tv80_mcode.v">
         <FileInfo>
           <Attr Name="Library" Val="tv80"/>
-          <Attr Name="AutoDisabled" Val="1"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
           <Attr Name="UsedIn" Val="simulation"/>
@@ -216,7 +160,6 @@
       <File Path="$PPRDIR/cores/MiSTer/brNX-tv80/rtl/tv80/tv80_reg.v">
         <FileInfo>
           <Attr Name="Library" Val="tv80"/>
-          <Attr Name="AutoDisabled" Val="1"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
           <Attr Name="UsedIn" Val="simulation"/>
@@ -225,7 +168,6 @@
       <File Path="$PPRDIR/cores/MiSTer/brNX-tv80/rtl/tv80/tv80n.v">
         <FileInfo>
           <Attr Name="Library" Val="tv80"/>
-          <Attr Name="AutoDisabled" Val="1"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
           <Attr Name="UsedIn" Val="simulation"/>
@@ -234,32 +176,14 @@
       <File Path="$PPRDIR/cores/MiSTer/brNX-tv80/rtl/tv80/tv80s.v">
         <FileInfo>
           <Attr Name="Library" Val="tv80"/>
-          <Attr Name="AutoDisabled" Val="1"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
           <Attr Name="UsedIn" Val="simulation"/>
         </FileInfo>
       </File>
-      <File Path="$PPRDIR/cores/MiSTer/GameboyColor/rtl/video.v">
-        <FileInfo>
-          <Attr Name="Library" Val="mister_gameboy"/>
-          <Attr Name="AutoDisabled" Val="1"/>
-          <Attr Name="UsedIn" Val="synthesis"/>
-          <Attr Name="UsedIn" Val="implementation"/>
-        </FileInfo>
-      </File>
       <File Path="$PPRDIR/retro/modules/wishbone-modules/rtl/basiccache.sv">
         <FileInfo>
           <Attr Name="Library" Val="mst_retro1"/>
-          <Attr Name="AutoDisabled" Val="1"/>
-          <Attr Name="UsedIn" Val="synthesis"/>
-          <Attr Name="UsedIn" Val="implementation"/>
-        </FileInfo>
-      </File>
-      <File Path="$PPRDIR/cores/MiSTer/GameboyColor/rtl/boot_rom.sv">
-        <FileInfo>
-          <Attr Name="Library" Val="mister_gameboy"/>
-          <Attr Name="AutoDisabled" Val="1"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
         </FileInfo>
@@ -267,24 +191,14 @@
       <File Path="$PPRDIR/retro/modules/wishbone-modules/rtl/cdc.sv">
         <FileInfo>
           <Attr Name="Library" Val="wbmodules"/>
-          <Attr Name="AutoDisabled" Val="1"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
           <Attr Name="UsedIn" Val="simulation"/>
         </FileInfo>
       </File>
-      <File Path="$PPRDIR/cores/MiSTer/GameboyColor/rtl/cheatcodes.sv">
-        <FileInfo>
-          <Attr Name="Library" Val="mister_gameboy"/>
-          <Attr Name="AutoDisabled" Val="1"/>
-          <Attr Name="UsedIn" Val="synthesis"/>
-          <Attr Name="UsedIn" Val="implementation"/>
-        </FileInfo>
-      </File>
       <File Path="$PPRDIR/retro/modules/wishbone-modules/rtl/crossbar.sv">
         <FileInfo>
           <Attr Name="Library" Val="wbmodules"/>
-          <Attr Name="AutoDisabled" Val="1"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
           <Attr Name="UsedIn" Val="simulation"/>
@@ -293,32 +207,14 @@
       <File Path="$PPRDIR/retro/Retro-1.sources/infrastructure/ddr3controller.sv">
         <FileInfo>
           <Attr Name="Library" Val="mst_retro1"/>
-          <Attr Name="AutoDisabled" Val="1"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
           <Attr Name="UsedIn" Val="simulation"/>
         </FileInfo>
       </File>
-      <File Path="$PPRDIR/cores/MiSTer/GameboyColor/rtl/gb.sv">
-        <FileInfo>
-          <Attr Name="Library" Val="mister_gameboy"/>
-          <Attr Name="AutoDisabled" Val="1"/>
-          <Attr Name="UsedIn" Val="synthesis"/>
-          <Attr Name="UsedIn" Val="implementation"/>
-        </FileInfo>
-      </File>
-      <File Path="$PPRDIR/cores/MiSTer/GameboyColor/rtl/gbc_snd.sv">
-        <FileInfo>
-          <Attr Name="Library" Val="mister_gameboy"/>
-          <Attr Name="AutoDisabled" Val="1"/>
-          <Attr Name="UsedIn" Val="synthesis"/>
-          <Attr Name="UsedIn" Val="implementation"/>
-        </FileInfo>
-      </File>
       <File Path="$PPRDIR/retro/Retro-1.sources/infrastructure/memoryhyperram.sv">
         <FileInfo>
           <Attr Name="Library" Val="mst_retro1"/>
-          <Attr Name="AutoDisabled" Val="1"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
         </FileInfo>
@@ -326,7 +222,6 @@
       <File Path="$PPRDIR/retro/Retro-1.sources/infrastructure/memoryport.sv">
         <FileInfo>
           <Attr Name="Library" Val="mst_retro1"/>
-          <Attr Name="AutoDisabled" Val="1"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
           <Attr Name="UsedIn" Val="simulation"/>
@@ -335,7 +230,6 @@
       <File Path="$PPRDIR/retro/Retro-1.sources/infrastructure/memorysram.sv">
         <FileInfo>
           <Attr Name="Library" Val="mst_retro1"/>
-          <Attr Name="AutoDisabled" Val="1"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
         </FileInfo>
@@ -343,7 +237,6 @@
       <File Path="$PPRDIR/retro/Retro-1.sources/retro-main.sv">
         <FileInfo>
           <Attr Name="Library" Val="mst_retro1"/>
-          <Attr Name="AutoDisabled" Val="1"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
         </FileInfo>
@@ -351,7 +244,6 @@
       <File Path="$PPRDIR/retro/modules/wishbone-modules/rtl/skid-buffer.sv">
         <FileInfo>
           <Attr Name="Library" Val="wbmodules"/>
-          <Attr Name="AutoDisabled" Val="1"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
           <Attr Name="UsedIn" Val="simulation"/>
@@ -359,23 +251,8 @@
       </File>
       <File Path="$PPRDIR/cores/mister-gbc-core/video-memory-bus.sv">
         <FileInfo>
-          <Attr Name="AutoDisabled" Val="1"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
-        </FileInfo>
-      </File>
-      <File Path="$PPRDIR/cores/MiSTer/GameboyColor/rtl/dpram.vhd">
-        <FileInfo>
-          <Attr Name="Library" Val="mister_gameboy"/>
-          <Attr Name="AutoDisabled" Val="1"/>
-          <Attr Name="UsedIn" Val="synthesis"/>
-        </FileInfo>
-      </File>
-      <File Path="$PPRDIR/cores/MiSTer/GameboyColor/rtl/gbc_snd.vhd">
-        <FileInfo>
-          <Attr Name="Library" Val="mister_gameboy"/>
-          <Attr Name="AutoDisabled" Val="1"/>
-          <Attr Name="UsedIn" Val="synthesis"/>
         </FileInfo>
       </File>
       <File Path="$PPRDIR/retro/Retro-1.sources/example-core-shim.sv">
@@ -387,7 +264,6 @@
       <File Path="$PPRDIR/retro/modules/wishbone-modules/rtl/wishbone.sv">
         <FileInfo>
           <Attr Name="Library" Val="wbmodules"/>
-          <Attr Name="AutoDisabled" Val="1"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
           <Attr Name="UsedIn" Val="simulation"/>
@@ -457,6 +333,49 @@
         <Option Name="SrcSet" Val="sources_1"/>
       </Config>
     </FileSet>
+    <FileSet Name="System_Bus_Simulation" Type="SimulationSrcs" RelSrcDir="$PSRCDIR/System_Bus_Simulation">
+      <Filter Type="Srcs"/>
+      <File Path="$PPRDIR/cores/mister-gbc-core/tests/system_bus_test.sv">
+        <FileInfo>
+          <Attr Name="Library" Val="wbmodules"/>
+          <Attr Name="UsedIn" Val="implementation"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+          <Attr Name="UsedIn" Val="synthesis"/>
+        </FileInfo>
+      </File>
+      <File Path="$PPRDIR/cores/mister-gbc-core/gb-memory-bus.sv">
+        <FileInfo>
+          <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="implementation"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
+      <File Path="$PPRDIR/retro/modules/wishbone-modules/rtl/wishbone-interface.sv">
+        <FileInfo>
+          <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="implementation"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
+      <File Path="$PPRDIR/simulation_setup/TestSystemBus_behav.wcfg">
+        <FileInfo>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
+      <Config>
+        <Option Name="DesignMode" Val="RTL"/>
+        <Option Name="TopModule" Val="TestSystemBus"/>
+        <Option Name="TransportPathDelay" Val="0"/>
+        <Option Name="TransportIntDelay" Val="0"/>
+        <Option Name="SelectedSimModel" Val="rtl"/>
+        <Option Name="PamDesignTestbench" Val=""/>
+        <Option Name="PamDutBypassFile" Val="xil_dut_bypass"/>
+        <Option Name="PamSignalDriverFile" Val="xil_bypass_driver"/>
+        <Option Name="PamPseudoTop" Val="pseudo_tb"/>
+        <Option Name="SrcSet" Val=""/>
+        <Option Name="XSimWcfgFile" Val="$PPRDIR/simulation_setup/TestSystemBus_behav.wcfg"/>
+      </Config>
+    </FileSet>
   </FileSets>
   <Simulators>
     <Simulator Name="XSim">
@@ -482,12 +401,10 @@
         <StratHandle Name="Flow_PerfOptimized_high" Flow="Vivado Synthesis 2020"/>
         <Step Id="synth_design">
           <Option Id="GatedClockConversion">2</Option>
-          <Option Id="ReTiming">1</Option>
-          <Option Id="NoCombineLuts">1</Option>
-          <Option Id="KeepEquivalentRegisters">1</Option>
-          <Option Id="FsmExtraction">1</Option>
-          <Option Id="ShregMinSize">5</Option>
           <Option Id="Directive">7</Option>
+          <Option Id="ReTiming">1</Option>
+          <Option Id="ShregMinSize">5</Option>
+          <Option Id="KeepEquivalentRegisters">1</Option>
         </Step>
       </Strategy>
       <GeneratedRun Dir="$PRUNDIR" File="gen_run.xml"/>
@@ -514,18 +431,18 @@
         </Step>
         <Step Id="power_opt_design"/>
         <Step Id="place_design">
-          <Option Id="Directive">0</Option>
+          <Option Id="Directive">8</Option>
         </Step>
         <Step Id="post_place_power_opt_design"/>
         <Step Id="phys_opt_design">
-          <Option Id="Directive">0</Option>
+          <Option Id="Directive">8</Option>
         </Step>
         <Step Id="route_design">
           <Option Id="Directive">1</Option>
           <Option Id="MoreOptsStr"><![CDATA[-tns_cleanup]]></Option>
         </Step>
         <Step Id="post_route_phys_opt_design" EnableStepBool="1">
-          <Option Id="Directive">0</Option>
+          <Option Id="Directive">3</Option>
         </Step>
         <Step Id="write_bitstream"/>
       </Strategy>

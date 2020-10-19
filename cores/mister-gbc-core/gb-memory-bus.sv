@@ -7,9 +7,13 @@
 // HRAM etc:
 //   GameBoy->SystemBus (2 clock)
 // Video:
-//   GameBoy->SystemBus->Video (5 clock)
+//   GameBoy->SystemBus->Video (2 clock)
 // Cartridge:
-//  Gameboy->SystemBus->Mapper->Cache/BRAM (7 clock)
+//  Gameboy->SystemBus->Mapper->Cache/BRAM (4 clock)
+// OAM DMA:
+//  Returns 'hff, stack explodes.
+// HDMA:
+//  When HDMA is active, SystemBus returns RTY, causing CPU to legitimately pause for a cycle.
 //
 //
 // Retro-GBC Registers:
@@ -87,37 +91,29 @@ module GBCMemoryBus
 );
 
     logic IsCGB;
-    wire VRAMBank;
-    wire [2:0] WRAMBank;
-    wire [7:0] OAMDMA;
-    wire [15:0] HDMASource;
-    wire [12:0] HDMADest;
-    wire [6:0] HDMALength;
-    wire InitCycle;
-    wire HDMAMode;
+    // Upper RAM and I/O registers
     logic [7:0] HRAM ['h00:'hff];
+    // Banks
+    wire VRAMBank = HRAM['h4f][0];
+    wire [2:0] WRAMBank = HRAM['h70][2:0];
+    // DMA
+    wire [7:0] OAMDMA = HRAM['h46];
+    wire [15:0] HDMASource = {HRAM['h51], HRAM['h52][7:4], '0};
+    wire [12:0] HDMADest = {HRAM['h53], HRAM['h54][7:4], '0};
+    wire [6:0] HDMALength = HRAM['h55][6:0];
+    wire HDMAMode = HRAM['h55][7];
+    // Close out the boot ROM if this is != 0
+    wire InitCycle = !HRAM['h50];
 
-    assign OAMDMA = HRAM['h46];
-    assign VRAMBank = HRAM['h4f][0];
-    assign HDMASource = {HRAM['h51], HRAM['h52][7:4], '0};
-    assign HDMADest = {HRAM['h53], HRAM['h54][7:4], '0};
-    assign HDMALength = HRAM['h55][6:0];
-    assign HDMAMode = HRAM['h55][7];
-    assign WRAMBank = HRAM['h70][2:0];
-    assign InitCycle = !HRAM['h50];
-
-    wire AddressMapper;
+    wire AddressCartridge;
     wire AddressIOHRAM;
     wire AddressVRAM;
     wire AddressWRAM;
     wire AddressOAM;
     wire AddressRetroRegs;
-    wire i_valid;
-    
+
     // $fea0..$fea7
-    assign AddressRetroRegs = MemoryBus.ADDR[15:8] == 'hfea && !MemoryBus.ADDR[3];
-    
-    assign i_valid = MemoryBus.CYC && MemoryBus.STB;
+    assign AddressRetroRegs = MemoryBus.ADDR[15:8] == 'hfea;
 
     assign AddressOAM = MemoryBus.ADDR[15:8] == 'hfe
                      && MemoryBus.ADDR[7:5] != 'b101 // 0xa
@@ -128,6 +124,8 @@ module GBCMemoryBus
     // $FF4F [0] selects which bank
     // 1000 0000 0000 0000
     // 1001 1111 1111 1111
+    //
+    // VideoRAM address space is 
     // VRAM and OAM are dual-port, accessible by the System Bus and the Video device concurrently.
     // During access by the Video device in mode 2, Video sends CTG='b01 (OAM).  In mode 3, it sends
     // it sends CTG='b11 (Video and OAM).
@@ -144,8 +142,7 @@ module GBCMemoryBus
     assign AddressIOHRAM = MemoryBus.ADDR[15:8] == 'hff;
     assign AddressBootEnd = AddressIOHRAM && MemoryBus.ADDR[7:0] == 'h50;
     assign AddressWRAM = MemoryBus.ADDR[15:13] == 'b110;
-    
-    logic [7:0] DOutReg;
+    wire AddressEcho = (MemoryBus.ADDR[15:13] == 'b111 && MemoryBus.ADDR[15:9] != 'b1111111);
 
     // ======================================================
     // = Map Cartridge to $0000 to $7FFF and $A000 to $BFFF =
@@ -154,8 +151,11 @@ module GBCMemoryBus
     //   - $0000-$3FFF fixed bank ROM
     //   - $4000-$7FFF bank swap ROM
     //   - $A000-$BFFF 8k cartridge ram space
+    //   - $FEA0-$FEA6 configuration registers during init
     // 3 inputs
-    assign AddressMapper = !MemoryBus.ADDR[15] || MemoryBus.ADDR[15:13] == 'b101;
+    assign AddressCartridge = !MemoryBus.ADDR[15] || MemoryBus.ADDR[15:13] == 'b101
+                           || ((AddressRetroRegs && !MemoryBus.ADDR[3]
+                               && MemoryBus.ADDR[2:0] != 'b111) && !InitCycle);
 
     // VRAM bank or OAM
     // VRAM address is always
@@ -178,126 +178,239 @@ module GBCMemoryBus
     // Banks are 4KiB, so the address for $D000-$DFFF is 12 bits plus the bank number at the top.
     // Bank select 0 puts bank 1 at $D000.
     // The bank select is $FF70 [2:0]
-    // 2 inputs
-    // { (MemoryBus.ADDR[13:12] == 'b00) ? 'b00 : (WRAMBank || 'b00),
-    //   MemoryBus.ADDR[11:0] }
+    // This algorithm constructs a correct address from an EchoRAM address.
+    wire [13:0] WRAMAddress = { MemoryBus.ADDR[12] ? (WRAMBank || 'b01) : 'b00, MemoryBus.ADDR[11:0] };
 
-    logic BusSwitch;
-    wire BusSwitchRegister;
-    wire BusSwitchSystemRAM;
-    wire BusSwitchVideoRAM;
-    wire BusSwitchCartridge;
-    logic [7:0] RegisterReadBuffer;
-    logic [3:0] BusSwitchPendingBus;
-    logic [4:0] OutstandingTransactions;
+    logic [7:0] DMACount;
+    logic [7:0] DMACycles;
+    wire DMAActive = DMACount != 'hff;
+    logic HDMAActive;
+
+    // 'b01 - Cartridge
+    // 'b10 - Video
+    // 'b11 - WRAM    
+    logic [1:0] RequestOutstanding;
     
-    assign BusSwitchRegister = BusSwitchPendingBus[0];
-    assign BusSwitchSystemRAM = BusSwitchPendingBus[1];
-    assign BusSwitchVideoRAM = BusSwitchPendingBus[2];
-    assign BusSwitchCartridge = BusSwitchPendingBus[3];
-
-    // Stall if either bus is stalling, Initiator changed buses, or we can't count more pending ACKs.
-    // Better have a skid buffer.
-    assign MemoryBus.STALL = SystemRAM.STALL || VideoRAM.STALL || Cartridge.STALL || BusSwitch
-                            || &OutstandingTransactions;
-
+    // Stalls are to keep the game boy in sync
+    assign MemoryBus.ForceStall =
+                           // Any bus stalled
+                           Cartridge.Stalled() || VideoRAM.Stalled() || SystemRAM.Stalled()
+                           // waiting on any request from any bus, stalled or not
+                        || RequestOutstanding
+                           // DMA did not finish in the time it should, so stall the Game Boy
+                        || (DMAActive && !DMACycles);
+    
     always_ff @(posedge SysCon.CLK)
+    if (SysCon.RST)
     begin
-        var int DeltaOT;
-        if (SysCon.RST)
-        begin
-            // Set all outgoing CYC to 0, drop all pending responses
-            SystemRAM.CYC <= '0;
-            VideoRAM.CYC <= '0;
-            Cartridge.CYC <= '0;
-        end else if (BusSwitch && !OutstandingTransactions) // STALL with no pending transactions
-        begin
-            // if it was a register access, just ACK and load memory
-            MemoryBus.ACK <= BusSwitchRegister;
-            MemoryBus.ERR <= '0;
-            MemoryBus.RTY <= '0;
-            MemoryBus.DAT_ToInitiator <= RegisterReadBuffer;
-            // Else strobe the correct bus
-            if (!BusSwitchRegister)
-            begin
-                SystemRAM.CYC <= BusSwitchSystemRAM;
-                SystemRAM.STB <= BusSwitchSystemRAM;
-                VideoRAM.CYC <= BusSwitchVideoRAM;
-                VideoRAM.STB <= BusSwitchVideoRAM;
-                Cartridge.CYC <= BusSwitchCartridge;
-                Cartridge.STB <= BusSwitchCartridge;
-                DeltaOT += 1;
-            end
+        // Clear internal state for stall, ACK/ERR/RTY
+        MemoryBus.Unstall();
+        MemoryBus.PrepareResponse();
+        DMACount <= 'hff;
+        HDMAActive <= '0;
+        //HRAM <=  '{default:'0};
+        HRAM['h50] <= '0; // init cycle
+        RequestOutstanding = '0;
+    end else
+    begin
+        MemoryBus.PrepareResponse();
+        Cartridge.Prepare();
+        VideoRAM.Prepare();
+        SystemRAM.Prepare();
 
-            // Done here
-            BusSwitch <= '0;
-        end else if (i_valid && !MemoryBus.STALL)
+        // =============
+        // == OAM DMA ==
+        // =============
+        if (DMAActive)
         begin
-            if (AddressMapper ||(InitCycle && AddressRetroRegs))
+            // OAM DMA occurs all at once; the system bus counts out the OAM DMA period separate
+            // from the actual operation.
+            // DMA becomes active after a write to the DMA register, which won't occur if waiting
+            // for other buses.
+            if (!VideoRAM.Stalled())
+            case (OAMDMA[7:5])
+            'b000,
+            'b101: // Source is cartridge
             begin
-                // Switch to cartridge bus
-                BusSwitch <= !Cartridge.CYC;
-                BusSwitchPendingBus <= 'b1000;
-                if (!(SystemRAM.CYC || VideoRAM.CYC || Cartridge.CYC))
+                if (Cartridge.ResponseReady() || DMACount == 160)
                 begin
-                    Cartridge.CYC <= '1;
-                    Cartridge.STB <= '1;
-                    DeltaOT += 1;
+                    // Both buses are available, so transfer the data to OAM and start the next rq
+                    DMACount <= DMACount - 1;
+                    if (DMACount) Cartridge.RequestData({OAMDMA, DMACount - 1});
+                    
+                    // VRAM bus is available, so send the data we just got to that
+                    // TGA 'b1:  OAM
+                    // TGC 'b1:  OAM DMA cycle, terminates the cycle when ADDR=0
+                    if (DMACount != 160)
+                        VideoRAM.SendData(DMACount, Cartridge.GetResponse(),,'b1,'b1);
                 end
-                Cartridge.ADDR <= MemoryBus.ADDR;
-                Cartridge.WE <= MemoryBus.WE;
             end
-            if (AddressIOHRAM)
+            'b100: // Source is video
             begin
-                if (MemoryBus.ADDR[7])
-                begin
-                    // Place HRAM directly
-                    //BusSwitch <= |OutstandingTransactions;
-                    BusSwitch <= SystemRAM.CYC || VideoRAM.CYC || Cartridge.CYC; 
-                    BusSwitchPendingBus <= 'b0001; // Register
-
-                    // Store immediately
-                    if (MemoryBus.WE) HRAM[MemoryBus.ADDR[7:0]] <= MemoryBus.DAT_ToTarget;
-                    // ACK immediately and return data if nothing else is going on
-                    if (!(SystemRAM.CYC || VideoRAM.CYC || Cartridge.CYC))
-                    begin
-                        MemoryBus.ACK <= '1;
-                        MemoryBus.DAT_ToInitiator <= HRAM[MemoryBus.ADDR[7:0]];
-                    end
-                    // Store into the buffer in any case, unless low power
-                    if (!LowPower || SystemRAM.CYC || VideoRAM.CYC || Cartridge.CYC)
-                        RegisterReadBuffer <= HRAM[MemoryBus.ADDR[7:0]];
-                end else case (MemoryBus.ADDR[6:0])
-                'h46, // OAM DMA
-                'h4f, // CGB VRAM Bank
-                'h51, // CGB HDMA
-                'h52,
-                'h53,
-                'h54,
-                'h55,
-                'h70: // WRAM Bank
-                    begin
-                        // XXX: Duplicate code
-                        // Place HRAM directly
-                        //BusSwitch <= |OutstandingTransactions;
-                        BusSwitch <= SystemRAM.CYC || VideoRAM.CYC || Cartridge.CYC; 
-                        BusSwitchPendingBus <= 'b0001; // Register
-    
-                        // Store immediately
-                        if (MemoryBus.WE) HRAM[MemoryBus.ADDR[7:0]] <= MemoryBus.DAT_ToTarget;
-                        // ACK immediately and return data if nothing else is going on
-                        if (!(SystemRAM.CYC || VideoRAM.CYC || Cartridge.CYC))
-                        begin
-                            MemoryBus.ACK <= '1;
-                            MemoryBus.DAT_ToInitiator <= HRAM[MemoryBus.ADDR[7:0]];
-                        end
-                        // Store into the buffer in any case, unless low power
-                        if (!LowPower || SystemRAM.CYC || VideoRAM.CYC || Cartridge.CYC)
-                            RegisterReadBuffer <= HRAM[MemoryBus.ADDR[7:0]];
-                    end
-                endcase
+                // Note that the method used for transfers from 8000h-9FFFh (display RAM) is
+                // different from that used for transfers from other addresses.
+                // TGA 'b0:  Normal address space
+                // TGA 'b1:  OAM DMA cycle,  copy from normal address space to OAM.  Terminates
+                // after copying to OAM['h00]
+                if (DMACount != 160)
+                    VideoRAM.SendData({ VRAMBank, OAMDMA[4:0], DMACount }, '0,,'0,'1);
+                DMACount <= DMACount - 1; 
             end
+            'b110: // WRAM
+            begin
+                if (SystemRAM.ResponseReady() || DMACount == 160)
+                begin
+                    // Both buses are available, so transfer the data to OAM and start the next rq
+                    DMACount <= DMACount - 1;
+                    if (DMACount) SystemRAM.RequestData(
+                                { OAMDMA[4] ? (WRAMBank || 'b01) : 'b00, OAMDMA[3:0], DMACount - 1}
+                               );
+                    if (DMACount != 160)
+                        VideoRAM.SendData(DMACount, SystemRAM.GetResponse(),,'b1,'b1);
+                end
+            end
+            endcase
         end
+
+        // ==========
+        // == HDMA ==
+        // ==========
+        // TODO:  HDMA with interaction with video mode
+
+        // ================================
+        // == General Access Arbitration ==
+        // ================================
+        // Something is accessing the system bus and we're not stalled
+
+        // Requests will not be outstanding when doing DMA (return garbage) or HDMA (RTY)
+        case (RequestOutstanding)
+        'b01:
+            if (Cartridge.ResponseReady())
+            begin
+                RequestOutstanding <= '0;
+                MemoryBus.SendResponse(Cartridge.GetResponse());
+            end
+        'b10:
+            if (VideoRAM.ResponseReady())
+            begin
+                RequestOutstanding <= '0;
+                MemoryBus.SendResponse(VideoRAM.GetResponse());
+            end
+        'b11:
+            if (SystemRAM.ResponseReady())
+            begin
+                RequestOutstanding <= '0;
+                MemoryBus.SendResponse(SystemRAM.GetResponse());
+            end
+        endcase        
+        if (!MemoryBus.STALL && MemoryBus.RequestReady())
+        begin
+            // FIXME:  Make sure DMA and HDMA behavior are correct
+            if (HDMAActive || DMAActive)
+            begin
+                // decrement to 0 but no further
+                DMACycles <= DMACycles - (DMAActive & |DMACycles);
+                // If DMA, return garbage.  This instruction floods the stack with 320 bytes.
+                if (DMAActive) MemoryBus.SendResponse('hff, 'b0);
+                // If HDMA, indicate that the memory bus is held, so the CPU pauses, but the
+                // Game Boy is not delayed (doesn't trigger CATC)
+                if (HDMAActive) MemoryBus.SendRetry();
+            end else if (!HDMAActive)
+            begin
+                // $0000-$7fff
+                // $a000-$bfff
+                // $fea0-$fea6
+                if (AddressCartridge)
+                begin
+                    if (MemoryBus.WE)
+                        Cartridge.SendData(MemoryBus.ADDR, MemoryBus.DAT_ToTarget);
+                    else
+                        Cartridge.RequestData(MemoryBus.ADDR);
+                    RequestOutstanding <= 'b01;
+                end
+
+                // $8000-$9fff
+                if (AddressVRAM)
+                begin
+                    // 14-bit address space addresses two banks of 8192
+                    if (MemoryBus.WE)
+                        VideoRAM.SendData({VRAMBank, MemoryBus.ADDR[12:0]}, MemoryBus.DAT_ToTarget);
+                    else
+                        VideoRAM.RequestData({VRAMBank, MemoryBus.ADDR[12:0]});
+                    RequestOutstanding <= 'b10;
+                end
+
+                // $a000-$bfff:  Cartridge, above
+                // $c000-$fdff
+                if (AddressWRAM || AddressEcho)
+                begin
+                    if (MemoryBus.WE)
+                        SystemRAM.SendData(WRAMAddress, MemoryBus.DAT_ToTarget);
+                    else
+                        SystemRAM.RequestData(WRAMAddress);
+                    RequestOutstanding <= 'b11;
+                end
+
+                // $fe00-$fe9f
+                if (AddressOAM)
+                begin
+                    // TGA address tag is OAM ('b1)
+                    if (MemoryBus.WE)
+                        VideoRAM.SendData({6'b0, MemoryBus.ADDR[7:0]}, MemoryBus.DAT_ToTarget,,'b1);
+                    else
+                        VideoRAM.RequestData({6'b0, MemoryBus.ADDR[7:0]},,,'b1);
+                    RequestOutstanding <= 'b10;
+                end
+
+                // $fea0-$fea6:  Cartridge, above
+                
+                // $fea7-$feff
+                // Just toss random data out
+                if (AddressRetroRegs && !AddressCartridge)
+                begin
+                    MemoryBus.SendResponse(HRAM[MemoryBus.ADDR[7:0]]);
+                end
+                
+                // $ff00-$ffff
+                // IO and HRAM access works during DMA but not HDMA
+                if (AddressIOHRAM)
+                begin
+                    // Always ACK
+                    MemoryBus.SendResponse(HRAM[MemoryBus.ADDR[7:0]]);
+                    if (MemoryBus.WE)
+                    begin
+                        HRAM[MemoryBus.ADDR[7:0]] <= MemoryBus.DAT_ToTarget;
+                        case (MemoryBus.ADDR[7:0])
+                            'h46: // OAM DMA
+                            begin
+                                DMACount <= 160;
+                                DMACycles <= 160;
+                            end
+                        endcase
+                    end
+                end
+                
+                if (AddressRetroRegs)
+                begin
+                end
+            end // !HDMAActive
+        end // !MemoryBus.STALL && MemoryBus.RequestReady()
     end
+// Verification
+`ifdef FORMAL
+    // Skid Buffer Process:
+    //  - Clock 0:  sender => STB0
+    //  - Clock 1:  skid bufer <= STALL
+    //              sender => STB1 (!)
+    //                     => skid buffer => reg, STB1
+    //  - Clock 2:  sender <= STALL
+    //              sender => STB2
+    //                     => skid buffer
+    //   Assume:  if STALL and CYC and STB on this clock, all inputs remain stable on next clock
+
+    // Bus management process:
+    //  CYC&STB:
+    //   - 
+`endif
 
 endmodule
