@@ -84,6 +84,9 @@ module GBCMemoryBus
 
     // Cartridge controller
     IWishbone.Initiator Cartridge,
+    
+    // TODO:  Sound, joypad, serial?
+    
     // System bus it exposes
     // Communication to main system via TGC.  System can call for boot from ROM, and controller can
     // call for save states and save RAM.
@@ -112,12 +115,11 @@ module GBCMemoryBus
     wire AddressOAM;
     wire AddressRetroRegs;
 
-    // $fea0..$fea7
-    assign AddressRetroRegs = MemoryBus.ADDR[15:8] == 'hfea;
-
     assign AddressOAM = MemoryBus.ADDR[15:8] == 'hfe
                      && MemoryBus.ADDR[7:5] != 'b101 // 0xa
                      && MemoryBus.ADDR[7:6] != 'b11; // more than 0xa
+    // $fea0..$fea7
+    assign AddressRetroRegs = MemoryBus.ADDR[15:8] == 'hfe && !AddressOAM;
     // ==================================
     // = Map VideoRAM to $8000 to $9FFF =
     // ================================== 
@@ -368,6 +370,7 @@ module GBCMemoryBus
                 // Just toss random data out
                 if (AddressRetroRegs && !AddressCartridge)
                 begin
+                    if (MemoryBus.ADDR[7:0] == 'ha7) IsCGB <= MemoryBus.GetResponse();
                     MemoryBus.SendResponse(HRAM[MemoryBus.ADDR[7:0]]);
                 end
                 
