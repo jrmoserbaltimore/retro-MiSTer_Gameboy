@@ -41,7 +41,7 @@
     <Option Name="IPStaticSourceDir" Val="$PIPUSERFILESDIR/ipstatic"/>
     <Option Name="EnableBDX" Val="FALSE"/>
     <Option Name="DSABoardId" Val="arty-z7-20"/>
-    <Option Name="WTXSimLaunchSim" Val="275"/>
+    <Option Name="WTXSimLaunchSim" Val="336"/>
     <Option Name="WTModelSimLaunchSim" Val="0"/>
     <Option Name="WTQuestaLaunchSim" Val="0"/>
     <Option Name="WTIesLaunchSim" Val="0"/>
@@ -398,12 +398,17 @@
   <Runs Version="1" Minor="11">
     <Run Id="Retro-R1" Type="Ft3:Synth" SrcSet="sources_1" Part="xc7s100fgga484-2" ConstrsSet="constrs_1" Description="Higher performance designs, resource sharing is turned off, the global fanout guide is set to a lower number, FSM extraction forced to one-hot, LUT combining is disabled, equivalent registers are preserved, SRL are inferred  with a larger threshold" AutoIncrementalCheckpoint="false" WriteIncrSynthDcp="false" State="current" Dir="$PRUNDIR/Retro-R1" IncludeInArchive="true">
       <Strategy Version="1" Minor="2">
-        <StratHandle Name="Flow_PerfOptimized_high" Flow="Vivado Synthesis 2020"/>
+        <StratHandle Name="Flow_PerfOptimized_high" Flow="Vivado Synthesis 2020">
+          <Desc>Higher performance designs, resource sharing is turned off, the global fanout guide is set to a lower number, FSM extraction forced to one-hot, LUT combining is disabled, equivalent registers are preserved, SRL are inferred  with a larger threshold</Desc>
+        </StratHandle>
         <Step Id="synth_design">
-          <Option Id="GatedClockConversion">2</Option>
-          <Option Id="Directive">7</Option>
-          <Option Id="ReTiming">1</Option>
+          <Option Id="ResourceSharing">2</Option>
+          <Option Id="NoCombineLuts">1</Option>
           <Option Id="ShregMinSize">5</Option>
+          <Option Id="ReTiming">1</Option>
+          <Option Id="GatedClockConversion">2</Option>
+          <Option Id="FsmExtraction">1</Option>
+          <Option Id="Directive">7</Option>
           <Option Id="KeepEquivalentRegisters">1</Option>
         </Step>
       </Strategy>
@@ -422,9 +427,11 @@
       <Report Name="ROUTE_DESIGN.REPORT_METHODOLOGY" Enabled="1"/>
       <RQSFiles/>
     </Run>
-    <Run Id="Retro-R1_impl" Type="Ft2:EntireDesign" Part="xc7s100fgga484-2" ConstrsSet="constrs_1" Description="Similar to Performance_ExplorePostRoutePhysOpt, but enables logic optimization step (opt_design) with the ExploreWithRemap directive." AutoIncrementalCheckpoint="false" WriteIncrSynthDcp="false" State="current" Dir="$PRUNDIR/Retro-R1_impl" SynthRun="Retro-R1" IncludeInArchive="true" GenFullBitstream="true">
+    <Run Id="Retro-R1_impl" Type="Ft2:EntireDesign" Part="xc7s100fgga484-2" ConstrsSet="constrs_1" Description="Similar to Performance_ExplorePostRoutePhysOpt, but enables logic optimization step (opt_design) with the ExploreWithRemap directive." AutoIncrementalCheckpoint="false" WriteIncrSynthDcp="false" State="current" SynthRun="Retro-R1" IncludeInArchive="true" GenFullBitstream="true">
       <Strategy Version="1" Minor="2">
-        <StratHandle Name="Performance_ExploreWithRemap" Flow="Vivado Implementation 2020"/>
+        <StratHandle Name="Performance_ExploreWithRemap" Flow="Vivado Implementation 2020">
+          <Desc>Similar to Performance_ExplorePostRoutePhysOpt, but enables logic optimization step (opt_design) with the ExploreWithRemap directive.</Desc>
+        </StratHandle>
         <Step Id="init_design"/>
         <Step Id="opt_design">
           <Option Id="Directive">6</Option>
@@ -446,7 +453,6 @@
         </Step>
         <Step Id="write_bitstream"/>
       </Strategy>
-      <GeneratedRun Dir="$PRUNDIR" File="gen_run.xml"/>
       <ReportStrategy Name="Vivado Implementation Default Reports" Flow="Vivado Implementation 2020"/>
       <Report Name="ROUTE_DESIGN.REPORT_METHODOLOGY" Enabled="1"/>
       <RQSFiles/>
