@@ -22,7 +22,7 @@ module RetroCoreShim
 )
 (
     // The console sends a core system clock (e.g. 200MHz) to produce the reference clock.
-    IWishbone.SysCon SysCon, // Core system clock
+    ISysCon SysCon, // Core system clock
 
     // DDR System RAM or other large RAM.
 
@@ -85,7 +85,7 @@ module RetroCoreShim
         .DataWidth(8) 
     ) IGBSystemRAM();
 
-    (* dont_touch = "true" *)
+    //(* dont_touch = "true" *)
     WishboneBRAM
     #(
         .AddressWidth(15),
@@ -93,8 +93,8 @@ module RetroCoreShim
         .DeviceType(DeviceType)
     ) GBSystemRAM
     (
-        .SysCon(IGBSystemRAM),
-        .Initiator(IGBSystemRAM)
+        .SysCon(SysCon),
+        .Initiator(IGBSystemRAM.Target)
     );
 
     IWishbone
@@ -103,7 +103,7 @@ module RetroCoreShim
         .DataWidth(8) 
     ) IGBVideoRAM();
 
-    (* dont_touch = "true" *)
+    //(* dont_touch = "true" *)
     WishboneBRAM
     #(
         .AddressWidth(14),
@@ -111,8 +111,8 @@ module RetroCoreShim
         .DeviceType(DeviceType)
     ) GBVideoRAM
     (
-        .SysCon(IGBVideoRAM),
-        .Initiator(IGBVideoRAM)
+        .SysCon(SysCon),
+        .Initiator(IGBVideoRAM.Target)
     );
     
     IWishbone
@@ -121,7 +121,7 @@ module RetroCoreShim
         .DataWidth(8) 
     ) IGBCartridgeRAM();
 
-    (* dont_touch = "true" *)
+    //(* dont_touch = "true" *)
     WishboneBRAM
     #(
         .AddressWidth(17),
@@ -129,8 +129,8 @@ module RetroCoreShim
         .DeviceType(DeviceType)
     ) GBCartridgeRAM
     (
-        .SysCon(IGBCartridgeRAM),
-        .Initiator(IGBCartridgeRAM)
+        .SysCon(SysCon),
+        .Initiator(IGBCartridgeRAM.Target)
     );
     // TODO:  Chunk of BRAM for cartridge cache
     // TODO:  Chunk of BRAM for mappers
@@ -191,7 +191,9 @@ module RetroCoreShim
         .DataWidth(8) 
     ) ILoadImage();
 
-    (* dont_touch = "true" *)
+    // XXX:  Need to instantiate a cache here, not an 8MB BRAM
+    //(* dont_touch = "true" *)
+    /*
     WishboneBRAM
     #(
         .AddressWidth(23),
@@ -199,10 +201,10 @@ module RetroCoreShim
         .DeviceType(DeviceType)
     ) LoadImage
     (
-        .SysCon(ILoadImage),
-        .Initiator(ILoadImage)
+        .SysCon(SysCon),
+        .Initiator(ILoadImage.Target)
     );
-    
+    */
     IWishbone
     #(
         .AddressWidth(16),
@@ -213,49 +215,25 @@ module RetroCoreShim
     //(* dont_touch = "true" *)
     GBCMapper Mapper
     (
-        .SysCon(IMapper),
-        .LoadImage(ILoadImage),
-        .CartridgeRAM(IGBCartridgeRAM),
-        .RTC(IRTC), // XXX:  Placeholder
-        .MemoryBus(IMapper)
+        .SysCon(SysCon),
+        //.LoadImage(ILoadImage.Initiator),
+        .LoadImage(ExpansionRAM0),
+        .CartridgeRAM(IGBCartridgeRAM.Initiator),
+        .RTC(IRTC.Initiator), // XXX:  Placeholder
+        .MemoryBus(IMapper.Target)
     );
 
     //(* dont_touch = "true" *)
     GBCMemoryBus SystemBus
     (
-        .SysCon(ISystemBus),
+        .SysCon(SysCon),
         // System and video BRAMs
-        .SystemRAM(IGBSystemRAM),
-        .VideoRAM(IGBVideoRAM),
+        .SystemRAM(IGBSystemRAM.Initiator),
+        .VideoRAM(IGBVideoRAM.Initiator),
         .VideoStatus(3'b000),
-        .Cartridge(IMapper),
+        .Cartridge(IMapper.Initiator),
         .MemoryBus(Host) // Placeholder 
     );
-
-    /*
-    assign ISystemBus.DAT_ToTarget = Host.DAT_ToTarget;
-    assign ISystemBus.CYC = Host.CYC;
-    assign ISystemBus.STB = Host.STB;
-    assign ISystemBus.ADDR = Host.ADDR;
-    assign ISystemBus.WE = Host.WE;
-    assign ISystemBus.SEL = Host.SEL;
-    assign Host.ACK = ISystemBus.ACK;
-    assign Host.ForceStall = ISystemBus.STALL;
-    assign Host.DAT_ToInitiator = ISystemBus.DAT_ToInitiator;
-    */
-    assign IMapper.CLK = SysCon.CLK;
-    assign ILoadImage.CLK = SysCon.CLK;
-    assign IGBCartridgeRAM.CLK = SysCon.CLK;
-    assign IGBSystemRAM.CLK = SysCon.CLK;
-    assign IGBVideoRAM.CLK = SysCon.CLK;
-    assign ISystemBus.CLK = SysCon.CLK;
-
-    assign IMapper.RST = SysCon.RST;
-    assign ILoadImage.RST = SysCon.RST;
-    assign IGBCartridgeRAM.RST = SysCon.RST;
-    assign IGBSystemRAM.RST = SysCon.RST;
-    assign IGBVideoRAM.RST = SysCon.RST;
-    assign ISystemBus.RST = SysCon.RST;
 
     logic [15:0] addrct;
     

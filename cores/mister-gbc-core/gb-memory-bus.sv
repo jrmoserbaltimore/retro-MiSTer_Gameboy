@@ -81,7 +81,7 @@ module GBCMemoryBus
     parameter LowPower = 0
 )
 (
-    IWishbone.SysCon SysCon,
+    ISysCon SysCon,
 
     // RAM for memory map
     IWishbone.Initiator SystemRAM, // Gameboy system RAM
@@ -238,6 +238,9 @@ module GBCMemoryBus
         // Clear internal state for stall, ACK/ERR/RTY
         MemoryBus.Unstall();
         MemoryBus.PrepareResponse();
+        Cartridge.Open();
+        VideoRAM.Open();
+        SystemRAM.Open();
         DMACount <= 'hff;
         HDMAActive <= '0;
         //HRAM <=  '{default:'0};
@@ -354,7 +357,7 @@ module GBCMemoryBus
                 MemoryBus.SendResponse(SystemRAM.GetResponse());
             end
         endcase        
-        if (!MemoryBus.STALL && MemoryBus.RequestReady())
+        if (!MemoryBus.Stalled() && MemoryBus.RequestReady())
         begin
             // FIXME:  Make sure DMA and HDMA behavior are correct
             // Each cycle, decrement to 0 but no further.

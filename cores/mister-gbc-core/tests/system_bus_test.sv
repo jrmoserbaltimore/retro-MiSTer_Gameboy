@@ -18,6 +18,11 @@ logic [2:0] delay = '0;
 logic [1:0] bus = '0;
 logic pause;
 
+ISysCon SysCon();
+
+assign SysCon.CLK = clk;
+assign SysCon.RST = reset;
+
 IWishbone i_SystemBus();
 IWishbone #(.AddressWidth(14), .TGAWidth(2)) i_VRAM();
 IWishbone #(.AddressWidth(15)) i_WRAM();
@@ -30,33 +35,76 @@ WishboneBRAM
     .DeviceType("Xilinx")
 ) GBSystemRAM
 (
-    .SysCon(i_WRAM.SysCon),
+    .SysCon(SysCon),
     .Initiator(i_WRAM)
 );
 
-assign i_SystemBus.CLK = clk;
-assign i_VRAM.CLK = clk;
-assign i_WRAM.CLK = clk;
-assign i_Cartridge.CLK = clk;
+    // ROM
+    IWishbone
+    #(
+        .AddressWidth(23),
+        .DataWidth(8) 
+    ) ILoadImage();
 
-assign i_SystemBus.RST = reset;
-assign i_VRAM.RST = reset;
-assign i_WRAM.RST = reset;
-assign i_Cartridge.RST = reset;
+    // CRAM
+    IWishbone
+    #(
+        .AddressWidth(17),
+        .DataWidth(8) 
+    ) ICartridgeRAM();
+    
+    IWishbone
+    #(
+        .AddressWidth(16),
+        .DataWidth(8)
+    )
+    IRTC();
+    
+    IWishbone
+    #(
+        .AddressWidth(16),
+        .DataWidth(8)
+    )
+    IMapper();
+
+    //(* dont_touch = "true" *)
+    GBCMapper Mapper
+    (
+        .SysCon(SysCon),
+        .LoadImage(ILoadImage.Initiator),
+        .CartridgeRAM(ICartridgeRAM.Initiator),
+        .RTC(IRTC.Initiator),
+        .MemoryBus(IMapper.Target)
+    );
 
 assign i_SystemBus.ForceStall = 0;
 assign i_VRAM.ForceStall = 0;
 assign i_WRAM.ForceStall = 0;
 assign i_Cartridge.ForceStall = 0;
 
+assign i_Cartridge.CYC = ILoadImage.CYC | ICartridgeRAM.CYC;
+assign i_Cartridge.STB = ILoadImage.STB | ICartridgeRAM.STB;
+assign i_Cartridge.DAT_ToTarget = ILoadImage.STB ? ILoadImage.DAT_ToTarget : ICartridgeRAM.DAT_ToTarget;
+assign i_Cartridge.ADDR = ILoadImage.STB ? ILoadImage.ADDR : ICartridgeRAM.ADDR;
+assign i_Cartridge.WE = ILoadImage.STB ? ILoadImage.WE : ICartridgeRAM.WE;
+
+assign ILoadImage.ACK = i_Cartridge.ACK;
+assign ICartridgeRAM.ACK = i_Cartridge.ACK;
+assign ILoadImage.DAT_ToInitiator = i_Cartridge.DAT_ToInitiator;
+assign ICartridgeRAM.DAT_ToInitiator = i_Cartridge.DAT_ToInitiator;
+assign ILoadImage.STALL = i_Cartridge.STALL;
+assign ICartridgeRAM.STALL = i_Cartridge.STALL;
+
+
 logic [7:0] OAM [0:'h9f];
 logic [7:0] Cartridge [0:'hff];
 GBCMemoryBus SystemBus
 (
-    .SysCon(i_SystemBus.SysCon),
+    .SysCon(SysCon),
     .SystemRAM(i_WRAM.Initiator),
     .VideoRAM(i_VRAM.Initiator),
-    .Cartridge(i_Cartridge.Initiator),
+    .VideoStatus(3'b000),
+    .Cartridge(IMapper.Initiator),
     .MemoryBus(i_SystemBus.Target)
 );
 always_ff @(posedge clk)
@@ -87,15 +135,15 @@ begin
             i_SystemBus.SendData(setup_addr[setup],'h0);
             setup <= setup+1;
             pause <= '1;
-        end else if (!pause && bus == '0)
+        end else if (!pause && bus == '0) // HRAM
         begin
             i_SystemBus.SendData({8'hff,1'b1,counter},{1'b0,counter});
             counter <= counter+1;
             if (counter == 'h7f)
                 bus <= bus + 1;
-        end else if (bus == 2'b01) // Cartridge
+        end else if (bus == 2'b01) // Cartridge RAM at $c0xx
         begin
-            i_SystemBus.SendData({8'h10,1'b0,counter},{1'b0,counter});
+            i_SystemBus.SendData({8'ha0,1'b0,counter},{1'b0,counter});
             counter <= counter+1;
             if (counter == 'h7f)
             begin

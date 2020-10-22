@@ -36,7 +36,7 @@
 // The mapper appears to be logic depth 6 and not much routing.  tv80 Z80 is 7ns critical path.
 module GBCMapper
 (
-    IWishbone.SysCon SysCon,
+    ISysCon SysCon,
     // Pass caching modules for both of these.  CartridgeRAM can cache from DDR etc. (paging)
     // LoadImage and SystemRAM will incur delays fixed by CATC. 
     IWishbone.Initiator LoadImage,
@@ -102,12 +102,12 @@ module GBCMapper
 
     wire TimerAccess = HasTimer && RAMBankID[3] && MemoryBus.STB && RAMEnabled;
 
-    wire ROMAddress = {
+    wire [22:0] ROMAddress = {
                         // First or second bank?
                         MemoryBus.ADDR[14] ? UpperROMBank : LowerROMBank,
                         MemoryBus.ADDR[13:0]
                       };
-    wire CRAMAddress = { RAMBank, MemoryBus.ADDR[12:0] };
+    wire [16:0] CRAMAddress = { RAMBank, MemoryBus.ADDR[12:0] };
 
     // Nice and easy:  ROM bank access is below 'h8000
     wire AddressROM = !MemoryBus.ADDR[15];
@@ -129,6 +129,9 @@ module GBCMapper
         // Clear internal state for stall, ACK/ERR/RTY
         MemoryBus.Unstall();
         MemoryBus.PrepareResponse();
+        LoadImage.Open();
+        CartridgeRAM.Open();
+        // RTC.Open();
         RequestOutstanding = '0;
     end else
     begin
@@ -164,7 +167,7 @@ module GBCMapper
             end
         endcase        
 
-        if (!MemoryBus.STALL && MemoryBus.RequestReady())
+        if (!MemoryBus.Stalled() && MemoryBus.RequestReady())
         begin
             // $0000-$7fff
             if (AddressROM)

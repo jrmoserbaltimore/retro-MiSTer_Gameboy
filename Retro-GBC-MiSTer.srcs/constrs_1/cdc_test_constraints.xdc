@@ -21,3 +21,5 @@
 
 
 create_clock -period 4.000 -name SpeedTest -waveform {0.000 2.000} [get_ports {SysCon\\.CLK}]
+
+
