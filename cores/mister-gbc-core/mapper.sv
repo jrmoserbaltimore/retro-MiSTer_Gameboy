@@ -133,6 +133,7 @@ module GBCMapper
         CartridgeRAM.Open();
         // RTC.Open();
         RequestOutstanding = '0;
+        ROMBankID[8] <= '0; // Might not actually get set on most mappers 
     end else
     begin
         MemoryBus.PrepareResponse();
@@ -210,10 +211,7 @@ module GBCMapper
                                 RAMEnabled <= (MemoryBus.DAT_ToTarget[3:0] == 'ha);
                             else if (!MapperType[MBC5] || !MemoryBus.ADDR[12]) // <= 'h2fff for MBC5
                             begin
-                                // MBC1 and MBC3 force '0 to '1
-                                ROMBankID[7:0] <= (!MemoryBus.DAT_ToTarget && !MapperType[MBC5])
-                                                  ? '1
-                                                  : MemoryBus.DAT_ToTarget & ROMBankMask[7:0];
+                                ROMBankID[7:0] <= MemoryBus.DAT_ToTarget & ROMBankMask[7:0];
                             end else // MBC5 high bits
                             begin
                                 ROMBankID <= {MemoryBus.DAT_ToTarget[0] & ROMBankMask[8], ROMBankID[7:0]};
@@ -226,7 +224,7 @@ module GBCMapper
                             //              RTC Register select     MBC3 (higher values)
                             // MBC1 behavior is based on RAM and ROM size
                             // MBC3 and MBC5 behave normally
-                            // FIXME:  Doesn't set ROM bank high bits for MBC1 1Mb+
+                            // Banking mode determines how RAMBankID affects MBC1 1Mb+
                             RAMBankID <= MemoryBus.DAT_ToTarget[3:0];
                         end
                         3'b011: //('h6000..'h7fff)
@@ -272,11 +270,15 @@ module GBCMapper
             // $c000-$dfff
             if (AddressCRAM) // Read from mapped RAM
             begin
-                if (MemoryBus.WE)
-                    CartridgeRAM.SendData(CRAMAddress, MemoryBus.GetRequest());
-                else
-                    CartridgeRAM.RequestData(CRAMAddress);
-                RequestOutstanding <= 2'b10;
+                if (RAMEnabled)
+                begin
+                    if (MemoryBus.WE)
+                        CartridgeRAM.SendData(CRAMAddress, MemoryBus.GetRequest());
+                    else
+                        CartridgeRAM.RequestData(CRAMAddress);
+                    RequestOutstanding <= 2'b10;
+                end else
+                    MemoryBus.SendResponse('h0a);
             end // RAM bank read
 
             // ===================================
@@ -308,11 +310,11 @@ module GBCMapper
             // 5-LUT: ROMBankID[4:1] || MapperType[MBC5]
             // 5-LUT: ROMBankID[0] & (A || (MapperType[MBC3] && ROMBankID[6:5]))
             // Might save the Mux by ORing with MapperType[ROM]
-            UpperROMBank[0] = ROMBankID[0] &
+
+            UpperROMBank[0] = ROMBankID[0] ||
                               (
-                                ROMBankID[4:1] // MBC1
-                                || MapperType[MBC5]
-                                || (MapperType[MBC3] && ROMBankID[6:5])
+                                   !ROMBankID[8:1] // 0 becomes 1
+                                && !MapperType[MBC5] // except MBC5 actually gives 0
                               );
             // One logic level from root
             UpperROMBank[4:1] = (ROMBankID[4:1] & ROMBankMask[4:1]);

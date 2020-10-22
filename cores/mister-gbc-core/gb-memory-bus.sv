@@ -5,15 +5,32 @@
 // This is a full CPU memory bus controller.
 //
 // HRAM etc:
-//   GameBoy->SystemBus (2 clock)
-// Video:
-//   GameBoy->SystemBus->Video (2 clock)
-// Cartridge:
-//  Gameboy->SystemBus->Mapper->Cache/BRAM (4 clock)
+//   No stall (available next clock cycle)
+// Video RAM:
+//   Available 3 cycles later
+// WRAM:
+//   Available 3 cycles later
+// Mapper:
+//   Registers available 4 cycles later
+//   Cartridge RAM available 5 cycles later
+//   ROM available at a minimum of 5 cycles later (cache may need to fetch from further storage)
+// Physical Cartridge:
+//   Requires 2 cycles to reach the cartridge controller and 2 to get back.
 // OAM DMA:
-//  Returns 'hff, stack explodes.
+//   HRAM or else returns 'hff, stack explodes.
 // HDMA:
-//  When HDMA is active, SystemBus returns RTY, causing CPU to legitimately pause for a cycle.
+//   When HDMA is active, SystemBus returns RTY, causing CPU to legitimately pause for a cycle.
+//
+// Most access will alternate between two ROM accesses (5 cycles) for instruction and operator,
+// then one WRAM or VRAM access (3 cycles), or one CRAM access (5 cycles).  That gives the average
+// three-access pattern a 15-cycle wait; however, the Z80 requires multiple cycles to do anything,
+// including a memory fetch, so three Z80 cycles is roughly 12 clock cycles.  That means the Game
+// Boy must run at aninternal 10-15 MHz with stall conditions to keep up with its target clock.
+//
+// For physical cartridges, the data must reach the cartridge controller with enough time to meet
+// timing requirements.  At 3 cycles round trip to get back, the Game Boy must run at a minimum
+// 40MHz internal.  An internal 100MHz is targeted; the tv80 runs at 140MHz on a Spartan-7 speed
+// grade 2, and 120MHz at speed grade 1.
 //
 // Note the pixel pipeline will synchronize with the CPU clock and stall when the CPU is stalled.
 // OAMDMA in particular can occur despite the stall; the video device notes the starting point of
@@ -98,15 +115,15 @@ module GBCMemoryBus
     IWishbone.Initiator Cartridge,
     
     // Wishbone bus for joypad is overkill:  it's one register and no timing concerns
-    input logic [5:0] JoypadIn,
-    output logic [5:4] JoypadOut,
+    //input logic [5:0] JoypadIn,
+    //output logic [5:4] JoypadOut,
     
     // Same is true of the IR port (ff56)
     // 2:  Read data (Bit 1, read-only)
     // 1:  Write data (Bit 0)
     // 0:  Data read enable (Bits 6-7)
-    input logic [2:0] IRIn,  
-    output logic [1:0] IROut,
+    //input logic [2:0] IRIn,  
+    //output logic [1:0] IROut,
     
     //IWishbone.Initiator AudioPU,
     // TODO:  serial, timer/divider??
@@ -459,11 +476,11 @@ module GBCMemoryBus
                     end else
                     begin // I/O access
                         case (MemoryBus.ADDR[7:0])
-                            'h00: // Joypad
-                            begin
-                                if (MemoryBus.WE) JoypadOut = MemoryBus.DAT_ToTarget[5:4];
-                                MemoryBus.SendResponse({2'b00, JoypadIn});
-                            end
+                            //'h00: // Joypad
+                            //begin
+                            //    if (MemoryBus.WE) JoypadOut = MemoryBus.DAT_ToTarget[5:4];
+                            //    MemoryBus.SendResponse({2'b00, JoypadIn});
+                            //end
                             'h46: // OAM DMA
                             begin
                                 if (MemoryBus.WE)
@@ -501,6 +518,7 @@ module GBCMemoryBus
                                     VideoRAM.RequestData({6'b0, MemoryBus.ADDR[7:0]},,,2'b10);
                                 RequestOutstanding <= 2'b10;
                             end
+                            /*
                             'h56:  // CGB IR port
                             begin
                                 // 2:  Read data (Bit 1, read-only)
@@ -512,6 +530,7 @@ module GBCMemoryBus
                                                         4'b0000, // Empty
                                                         IRIn[2], IRIn[1]}); // Read/write bits
                             end
+                            */
                             default: // Send garbage
                                 MemoryBus.SendResponse('hff); //(HRAM[MemoryBus.ADDR[7:0]] | 'h80);
                         endcase
