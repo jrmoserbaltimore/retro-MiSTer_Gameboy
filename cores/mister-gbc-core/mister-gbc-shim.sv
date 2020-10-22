@@ -40,8 +40,8 @@ module RetroCoreShim
 
     // Cartridge bus wide enough for NES, 69 I/O
     output logic CartridgeClk,
-    input logic [68:0] CartridgeIn,
-    output logic [68:0] CartridgeOut,
+//    input logic [68:0] CartridgeIn,
+//    output logic [68:0] CartridgeOut,
 
     // Controller I/O, from µC
     input logic ControllerIn,
@@ -81,50 +81,56 @@ module RetroCoreShim
     // dedicating the BRAM exclusively to the GBC when not running.
     IWishbone
     #(
-        .AddressBusWidth(15),
-        .DataBusWidth(1) 
+        .AddressWidth(15),
+        .DataWidth(8) 
     ) IGBSystemRAM();
 
+    (* dont_touch = "true" *)
     WishboneBRAM
     #(
-        .AddressBusWidth(15),
-        .DataBusWidth(1),
+        .AddressWidth(15),
+        .DataWidth(8),
         .DeviceType(DeviceType)
     ) GBSystemRAM
     (
-        .Initiator(IGBSystemRAM.Target)
+        .SysCon(IGBSystemRAM),
+        .Initiator(IGBSystemRAM)
     );
 
     IWishbone
     #(
-        .AddressBusWidth(14),
-        .DataBusWidth(1) 
+        .AddressWidth(14),
+        .DataWidth(8) 
     ) IGBVideoRAM();
 
+    (* dont_touch = "true" *)
     WishboneBRAM
     #(
-        .AddressBusWidth(14),
-        .DataBusWidth(1),
+        .AddressWidth(14),
+        .DataWidth(8),
         .DeviceType(DeviceType)
     ) GBVideoRAM
     (
-        .Initiator(IGBVideoRAM.Target)
+        .SysCon(IGBVideoRAM),
+        .Initiator(IGBVideoRAM)
     );
     
-    WishboneBRAM
+    IWishbone
     #(
-        .AddressBusWidth(17),
-        .DataBusWidth(1) 
+        .AddressWidth(17),
+        .DataWidth(8) 
     ) IGBCartridgeRAM();
 
-    (* dont_touch = "true" *)WishboneBRAM
+    (* dont_touch = "true" *)
+    WishboneBRAM
     #(
-        .AddressBusWidth(17),
-        .DataBusWidth(1),
+        .AddressWidth(17),
+        .DataWidth(8),
         .DeviceType(DeviceType)
     ) GBCartridgeRAM
     (
-        .Initiator(IGBCartridgeRAM.Target)
+        .SysCon(IGBCartridgeRAM),
+        .Initiator(IGBCartridgeRAM)
     );
     // TODO:  Chunk of BRAM for cartridge cache
     // TODO:  Chunk of BRAM for mappers
@@ -133,6 +139,7 @@ module RetroCoreShim
     // = CATC =
     // ========
     // Cartridge controller triggers Delay if data isn't ready
+    /*
     RetroCATC CATC(
         .Clk(CoreClk),
         .Delay(Delay),
@@ -140,10 +147,12 @@ module RetroCoreShim
         .Reset(Reset),
         .ClkEnOut(Ce)
     );
+    */
 
     // =================================
     // = Interface to hardware GamePak =
     // =================================
+    /*
     IGBCGamePak GamePak(
         .Clk(CartridgeClk),
         .Write(CartridgeOut[2]),
@@ -155,89 +164,108 @@ module RetroCoreShim
         .Reset(CartridgeOut[29]),
         .Audio(CartridgeIn[30])
     );
+    */
 
     // ========================
     // = Interface to GamePak =
     // ========================
-    IWishbone
-    #(
-        .AddressBusWidth(16),
-        .DataBusWidth(1)
-    )
-    GamePakFrontend();
 
     IWishbone
     #(
-        .AddressBusWidth(16),
-        .DataBusWidth(1)
+        .AddressWidth(16),
+        .DataWidth(8)
     )
-    SystemBusFrontend();
+    ISystemBus();
 
-    IGBCGamePakBus GamePakBus
-    (
-        .CS(CS),
-        .Reset(Reset),
-        .Audio(AudioIn)
-    );
-    
-    
+    IWishbone
+    #(
+        .AddressWidth(16),
+        .DataWidth(8)
+    )
+    IRTC();
     // FIXME:  Hastily-assembled stuff to get this to actually synthesize
     
     IWishbone
     #(
-        .AddressBusWidth(23),
-        .DataBusWidth(1) 
+        .AddressWidth(23),
+        .DataWidth(8) 
     ) ILoadImage();
+
+    (* dont_touch = "true" *)
+    WishboneBRAM
+    #(
+        .AddressWidth(23),
+        .DataWidth(8),
+        .DeviceType(DeviceType)
+    ) LoadImage
+    (
+        .SysCon(ILoadImage),
+        .Initiator(ILoadImage)
+    );
     
     IWishbone
     #(
-        .AddressBusWidth(16),
-        .DataBusWidth(1)
+        .AddressWidth(16),
+        .DataWidth(8)
     )
     IMapper();
 
-    (* dont_touch = "true" *) GBCMapper Mapper
+    //(* dont_touch = "true" *)
+    GBCMapper Mapper
     (
-        .Clk(CoreClk),
-        .ClkEn(Ce),
-        .Reset(Reset),
-        .LoadImage(ILoadImage.Initiator),
-        .CartridgeRAM(IGBCartridgeRAM.Initiator),
-        
-        .MemoryBus(IMapper.Target)
-    );
-    // Cartridge Controller is either pass-through or storage + mappers
-    (* dont_touch = "true" *) GBCCartridgeController CartridgeController
-    (
-        .Clk(CoreClk),
-        .ClkEn(Ce),
-
-        // FIXME:  COMM placeholder
-        .Comm(Console),
-        .Mapper(IMapper.Initiator),
-
-        // Example:  Physical GamePak
-        .GamePak(GamePak.Controller),
-
-        // GamePak virtual interface for core
-        .MemoryBus(GamePakFrontend.Target),
-        .GamePakBus(GamePakBus.Controller)
+        .SysCon(IMapper),
+        .LoadImage(ILoadImage),
+        .CartridgeRAM(IGBCartridgeRAM),
+        .RTC(IRTC), // XXX:  Placeholder
+        .MemoryBus(IMapper)
     );
 
-    assign SystemBusFrontend.Address = Test.Address;
-    assign SystemBusFrontend.Access = Test.Access;
-    assign SystemBusFrontend.Write = Test.Write;  
-    (* dont_touch = "true" *) GBCMemoryBus SystemBus
+    //(* dont_touch = "true" *)
+    GBCMemoryBus SystemBus
     (
-        .Clk(CoreClk),
-        .ClkEn(Ce),
-        .Comm(Console), // FIXME:  COMM placeholder
+        .SysCon(ISystemBus),
         // System and video BRAMs
-        .SystemRAM(IGBSystemRAM.Initiator),
-        .VideoRAM(IGBVideoRAM.Initiator), // FIXME:  VRAM module must ignore system RAM stuff when accosted during PPU access
-        .Cartridge(GamePakFrontend.Initiator),
-        .MemoryBus(SystemBusFrontend.Target)
+        .SystemRAM(IGBSystemRAM),
+        .VideoRAM(IGBVideoRAM),
+        .VideoStatus(3'b000),
+        .Cartridge(IMapper),
+        .MemoryBus(Host) // Placeholder 
     );
+
+    /*
+    assign ISystemBus.DAT_ToTarget = Host.DAT_ToTarget;
+    assign ISystemBus.CYC = Host.CYC;
+    assign ISystemBus.STB = Host.STB;
+    assign ISystemBus.ADDR = Host.ADDR;
+    assign ISystemBus.WE = Host.WE;
+    assign ISystemBus.SEL = Host.SEL;
+    assign Host.ACK = ISystemBus.ACK;
+    assign Host.ForceStall = ISystemBus.STALL;
+    assign Host.DAT_ToInitiator = ISystemBus.DAT_ToInitiator;
+    */
+    assign IMapper.CLK = SysCon.CLK;
+    assign ILoadImage.CLK = SysCon.CLK;
+    assign IGBCartridgeRAM.CLK = SysCon.CLK;
+    assign IGBSystemRAM.CLK = SysCon.CLK;
+    assign IGBVideoRAM.CLK = SysCon.CLK;
+    assign ISystemBus.CLK = SysCon.CLK;
+
+    assign IMapper.RST = SysCon.RST;
+    assign ILoadImage.RST = SysCon.RST;
+    assign IGBCartridgeRAM.RST = SysCon.RST;
+    assign IGBSystemRAM.RST = SysCon.RST;
+    assign IGBVideoRAM.RST = SysCon.RST;
+    assign ISystemBus.RST = SysCon.RST;
+
+    logic [15:0] addrct;
+    
+    always_ff @(posedge SysCon.CLK)
+    begin
+        if (SysCon.RST)
+        begin
+            Host.Unstall();
+        end
+    end
     /*
     RetroMyCore TheCore
     (
@@ -254,41 +282,4 @@ module RetroCoreShim
         .SerialClk(0)
     );
     */
-endmodule
-
-// Core module:  Abstract to clock/CE, RAM elements, AV, cartridge, peripherals.
-// Cartridge controler acts as the whole CPU memory bus.
-module RetroMisterGBCCore
-(
-    input Clk,
-    input ClkEn,
-
-    // FIXME:  input for comm with HDMI/DP?
-    output logic [12:0] AV,
-
-    // CPU memory bus, attached to the cartridge controller
-    IWishbone.Initiator MemoryBus,
-    // Other GamePak pins
-    IGBCGamePakBus.GameBoy GamePak,
-
-    // ================
-    // = External Bus =
-    // ================
-    // Cartridge and serial bus only in this configuration.
-    // Uses 30 I/O GamePak + 4 I/O serial = 34 I/O
-
-    // Serial bus for Game-Link cable
-    output logic SerialOut,
-    input logic SerialIn,
-    output logic SD, // CPU pin 14? Disconnected in the cable
-    output logic SerialClk
-);
-
-    // TODO:
-    //   - Cartridge controller (with mapper behind it, ROM, CRAM; 0x0000-0xBFFF)
-    //   - Memory bus (peel vram stuff out of cartridge controller)
-    //   - VRAM controller (accessed by memory bus and direct through PPU, not simultaneously)
-    //     - If CPU attempts to access VRAM and OAM while not in mode 0, 1, or 2:
-    //       - ignore writes
-    //       - return 'hff for reads 
 endmodule

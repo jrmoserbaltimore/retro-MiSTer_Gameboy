@@ -23,6 +23,17 @@ IWishbone #(.AddressWidth(14), .TGAWidth(2)) i_VRAM();
 IWishbone #(.AddressWidth(15)) i_WRAM();
 IWishbone i_Cartridge();
 
+WishboneBRAM
+#(
+    .AddressWidth(15),
+    .DataWidth(8),
+    .DeviceType("Xilinx")
+) GBSystemRAM
+(
+    .SysCon(i_WRAM.SysCon),
+    .Initiator(i_WRAM)
+);
+
 assign i_SystemBus.CLK = clk;
 assign i_VRAM.CLK = clk;
 assign i_WRAM.CLK = clk;
@@ -122,7 +133,16 @@ begin
             begin
                 counter <= 'h00;
                 pause <= '0;
-                bus <= 2'b00; // return to HRAM test
+                bus <= 2'b11; // return to HRAM test
+            end
+        end else if (bus == 2'b11) // WRAM
+        begin
+            i_SystemBus.SendData({8'hc0,1'b0,counter},{1'b0,counter});
+            counter <= counter+1;
+            if (counter == 'h7f)
+            begin
+                bus <= 2'b00; // move to VRAM
+                counter <= 'h00;
             end
         end else if (pause) i_SystemBus.ADDR <= 'hff00;
     end

@@ -304,6 +304,7 @@ module GBCMemoryBus
                         VideoRAM.SendData(DMACount, SystemRAM.GetResponse(),,2'b01,1'b1);
                 end
             end
+            default:  DMACount <= DMACount - 1; // XXX:  Should never happen
             endcase
         end
 
@@ -314,7 +315,7 @@ module GBCMemoryBus
 
         if (HDMAActive)
         begin
-            if (!HRAM['hff55][7] || HRAM['hff41][1:0] == 2'b00)
+            if (!HRAM['h55][7] || HRAM['h41][1:0] == 2'b00)
             begin
                 // Either general-purpose ($ff55[7]==0) or only during H-Blank
                 
@@ -509,7 +510,7 @@ module GBCMemoryBus
                                                         IRIn[2], IRIn[1]}); // Read/write bits
                             end
                             default: // Send garbage
-                                MemoryBus.SendResponse(HRAM[MemoryBus.ADDR[7:0]]);
+                                MemoryBus.SendResponse('hff); //(HRAM[MemoryBus.ADDR[7:0]] | 'h80);
                         endcase
                     end
                 end // I/O and HRAM access
