@@ -53,9 +53,11 @@
 //      - .3 HasRumble
 //      - .4 HasSensor
 //  - $FEA7 - Platform flag
-//    - Bit 0:  0=DMG, 1=GBC
-//    - Bit 1:  0=DMG compatibility, 1=GBC Only
-//    - Bit 2:  SGB
+//    - Bit 0:  0=DMG, 1=GBC console
+//    - Bit 1:  1=SGB console
+//    - Bit 2:  1=GBA console
+//    - Bit 3:  0=DMG compatibility, 1=GBC Only game
+//    - Bit 3:  SGB console
 // Areas to map:
 //   - Mapper (Done)
 //     - $0000-$7FFF
@@ -70,10 +72,10 @@
 //     - Sound Channel Registers FF10-14, FF16-FF1E, FF20-FF26
 //     - Waveform Register FF30-3F
 //   - I/O [XXX:  Just make this one Wishbone bus? with 4 address spaces? Combine with sound?]
-//     - FF00 (Joypad) (Done)
+//     - FF00 (Joypad)
 //     - FF01-FF02 (Serial I/O)
 //     - FF04-FF07 (Timer)
-//     - FF56 (IR port) (Done)
+//     - FF56 (IR port)
 // Internal areas:
 //   - Bank control (Done)
 //     - FF4F (CGB VRAM Bank)
@@ -90,8 +92,11 @@
 //  - FF50 Exit Boot ROM
 //
 // TODO:
-//   - Gameboy Color detection
-//   - LCD interrupt?
+//   - LCD interrupt
+//   - HDMA
+//   - I/O controller (Joypad, Serial, Timer, IR port)
+//   - Sound controller
+//   - Debug port
 module GBCMemoryBus
 #(
     parameter DeviceType = "Xilinx",
@@ -134,13 +139,12 @@ module GBCMemoryBus
     IWishbone.Target MemoryBus
 );
 
-    logic IsCGB;
     // Upper RAM and I/O registers
     logic [7:0] HRAM ['h00:'hff];
     //assign HRAM['h41][2:0] = VideoStatus; // read-only video registers
     // Banks
     wire VRAMBank = HRAM['h4f][0];
-    wire [2:0] WRAMBank = HRAM['h70][2:0];
+    wire [2:0] WRAMBank = (HRAM['h70][2:0] | (3'b001 &  ~|HRAM['h70][2:0]));
     // DMA
     wire [7:0] OAMDMA = HRAM['h46];
     wire [15:0] HDMASource = {HRAM['h51], HRAM['h52][7:4], '0};
@@ -149,6 +153,7 @@ module GBCMemoryBus
     wire HDMAMode = HRAM['h55][7];
     // Close out the boot ROM if this is != 0
     wire InitCycle = !HRAM['h50];
+    wire IsCGB = HRAM['ha7][0];
 
     wire AddressOAM = MemoryBus.ADDR[15:8] == 'hfe
                      && MemoryBus.ADDR[7:5] != 'b101 // 0xa
@@ -219,7 +224,7 @@ module GBCMemoryBus
     // Bank select 0 puts bank 1 at $D000.
     // The bank select is $FF70 [2:0]
     // This algorithm constructs a correct address from an EchoRAM address.
-    wire [13:0] WRAMAddress = { MemoryBus.ADDR[12] ? (WRAMBank || 'b01) : 'b00, MemoryBus.ADDR[11:0] };
+    wire [14:0] WRAMAddress = { MemoryBus.ADDR[12] ? WRAMBank : 3'b000, MemoryBus.ADDR[11:0] };
 
     logic [7:0] DMACount;
     logic [7:0] DMACycles;
@@ -236,7 +241,7 @@ module GBCMemoryBus
     wire vs = VideoRAM.Stalled();
     wire ss = SystemRAM.Stalled();
     wire dc = (DMAActive && !DMACycles);
-    
+    wire[14:0] OAMDMAWRAM={ OAMDMA[4] ? WRAMBank : 3'b000, OAMDMA[3:0], 8'b0} | {7'b0, DMACount - 1 };
     //wire fs = Cartridge.Stalled() || VideoRAM.Stalled() || SystemRAM.Stalled() || RequestOutstanding || (DMAActive && !DMACycles);
     //wire fs2 = cs || vs || ss || dc || RequestOutstanding;
     
@@ -318,7 +323,7 @@ module GBCMemoryBus
                     // Both buses are available, so transfer the data to OAM and start the next rq
                     DMACount <= DMACount - 1;
                     if (DMACount) SystemRAM.RequestData(
-                                { OAMDMA[4] ? (WRAMBank || 2'b01) : 2'b00, OAMDMA[3:0], DMACount - 1}
+                          {OAMDMA[4] ? WRAMBank : 3'b000, OAMDMA[3:0], 8'b0} | {7'b0, DMACount - 1}
                                );
                     if (DMACount != 160)
                         VideoRAM.SendData(DMACount, SystemRAM.GetResponse(),,2'b01,1'b1);
@@ -456,8 +461,7 @@ module GBCMemoryBus
                         end
                     'ha7:
                         begin
-                            if (MemoryBus.WE && InitCycle) IsCGB <= MemoryBus.GetRequest();
-                            MemoryBus.SendResponse(IsCGB);
+
                         end
                     default:
                         MemoryBus.SendResponse(8'hff);
@@ -468,14 +472,16 @@ module GBCMemoryBus
                 // IO and HRAM access works during DMA but not HDMA
                 if (AddressIOHRAM)
                 begin
+                    // Always set
+                    if (MemoryBus.WE) HRAM[MemoryBus.ADDR[7:0]] <= MemoryBus.GetRequest();
                     // Always ACK on HRAM access
                     if (MemoryBus.ADDR[7])
                     begin
                         MemoryBus.SendResponse(HRAM[MemoryBus.ADDR[7:0]]);
-                        if (MemoryBus.WE) HRAM[MemoryBus.ADDR[7:0]] <= MemoryBus.GetRequest();
+                        //if (MemoryBus.WE) HRAM[MemoryBus.ADDR[7:0]] <= MemoryBus.GetRequest();
                     end else
                     begin // I/O access
-                        case (MemoryBus.ADDR[7:0])
+                        case (MemoryBus.ADDR[6:0])
                             //'h00: // Joypad
                             //begin
                             //    if (MemoryBus.WE) JoypadOut = MemoryBus.DAT_ToTarget[5:4];
@@ -487,7 +493,7 @@ module GBCMemoryBus
                                 begin
                                     DMACount <= 160;
                                     DMACycles <= 160;
-                                    HRAM[MemoryBus.ADDR[7:0]] <= MemoryBus.GetRequest();
+                                    //HRAM[MemoryBus.ADDR[7:0]] <= MemoryBus.GetRequest();
                                 end
                                 MemoryBus.SendResponse(HRAM[MemoryBus.ADDR[7:0]]);
                             end
@@ -518,6 +524,10 @@ module GBCMemoryBus
                                     VideoRAM.RequestData({6'b0, MemoryBus.ADDR[7:0]},,,2'b10);
                                 RequestOutstanding <= 2'b10;
                             end
+                            'h50: // Lock this once it's non-zero
+                            begin
+                                HRAM['h50] <= HRAM['h50] ? HRAM['h50] : MemoryBus.GetRequest();
+                            end
                             /*
                             'h56:  // CGB IR port
                             begin
@@ -532,7 +542,9 @@ module GBCMemoryBus
                             end
                             */
                             default: // Send garbage
+                            begin
                                 MemoryBus.SendResponse('hff); //(HRAM[MemoryBus.ADDR[7:0]] | 'h80);
+                            end
                         endcase
                     end
                 end // I/O and HRAM access

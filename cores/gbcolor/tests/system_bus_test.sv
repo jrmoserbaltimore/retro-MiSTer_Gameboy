@@ -10,7 +10,7 @@ always #5 clk=~clk;
 logic reset = '1;
 logic [8:0] setup = '0;
 
-logic [15:0] setup_addr [0:12] = {
+logic [15:0] setup_addr [0:14] = {
     'hff4f, // VRAM bank
     'hff70, // WRAM bank
 
@@ -21,16 +21,20 @@ logic [15:0] setup_addr [0:12] = {
     'hfea4, // ROM bank mask high bit
     'hfea5, // RAM bank mask, 'b011 for banks 0-3
     'hfea6, // Has RAM = 'h01
+    'hfea7, // Console type
 
     'h1000, // MBC1:  RAM enable
     'h2000, // MBC1:  ROM Bank select
     'h4000, // MBC1:  RAM bank select
-    'h6000 // MBC1:  Banking mode select (no effect, set to 0)
+    'h6000, // MBC1:  Banking mode select (no effect, set to 0)
+    
+    'hff50 // close out init.
     };
-logic [7:0] setup_data [0:12] = {
+logic [7:0] setup_data [0:14] = {
     'h00, 'h00, // System banks
-    'h02, 'h04, 'h03, 8'b00011111, 'h00, 'h03, 'h01, // Mapper setup registers
-    'h0a, 'h01, 'h01, 'h00 // Mapper registers
+    'h02, 'h04, 'h03, 8'b00011111, 'h00, 'h03, 'h01, 'h01, // Mapper setup registers
+    'h0a, 'h01, 'h01, 'h00, // Mapper registers
+    'ha0
     };
 
 logic [6:0] counter = '0;
@@ -39,6 +43,8 @@ logic [2:0] delay = '0;
 logic [2:0] bus = '0;
 logic pause;
 
+logic VRAM_bank = '1;
+logic [2:0] WRAM_bank = 'h1;
 ISysCon SysCon();
 
 assign SysCon.CLK = clk;
@@ -200,6 +206,12 @@ begin
                 dmacounter <= 160;
             end else if (counter == 'h70) // Wait for OAMDMA
                 i_SystemBus.SendData('hff81, dmacounter);
+            else if (counter == 'h71) // WRAM upper bank to OAM DMA
+            begin
+                i_SystemBus.SendData('hff46, 'hd0);
+                dmacounter <= 160;
+            end else if (counter == 'h72)
+                i_SystemBus.SendData('hff82, dmacounter);
             else
             begin
                 counter <= 'h00;
@@ -208,9 +220,9 @@ begin
             end
         end else if (bus == 'h03) // WRAM
         begin
-            i_SystemBus.SendData({8'hc0,1'b0,counter},{1'b0,counter});
-            counter <= counter+1;
-            if (counter == 'h7f)
+            i_SystemBus.SendData({8'hd0,1'b0,counter},{1'b0,counter});
+            counter <= counter+'h01;
+            if (counter == 'h10)
             begin
                 bus <= bus+1;
                 counter <= 'h00;
@@ -218,12 +230,22 @@ begin
         end else if (bus == 'h04) // Cartridge ROM at $10xx
         begin
             i_SystemBus.RequestData({8'h10,1'b0,counter});
-            counter <= counter+1;
-            if (counter == 'h7f)
+            counter <= counter+'h10;
+            if (counter == 'h70)
             begin
-                bus <= 3'b00; // move to HRAM
+                bus <= bus+1;
                 counter <= 'h00;
             end
+        end else if (bus == 'h05)
+        begin
+            i_SystemBus.SendData('hff4f, VRAM_bank);
+            VRAM_bank <= ~VRAM_bank;
+            bus <= bus+1;
+        end else if (bus == 'h06)
+        begin
+            i_SystemBus.SendData('hff70, WRAM_bank);
+            WRAM_bank <= WRAM_bank+1;
+            bus <= 'h01; // return to VRAM
         end else if (pause) i_SystemBus.ADDR <= 'hff00;
     end
     

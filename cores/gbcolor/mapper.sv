@@ -305,18 +305,11 @@ module GBCMapper
         if (MapperType[MBC1] || MapperType[MBC2] || MapperType[MBC3] || MapperType[MBC5])
         begin
             // Can't be 0 except on MBC5
-            // This is two logic levels deep and leaves resources for two wires; it begins at the
-            // root of this always_comb block.
-            // 5-LUT: ROMBankID[4:1] || MapperType[MBC5]
-            // 5-LUT: ROMBankID[0] & (A || (MapperType[MBC3] && ROMBankID[6:5]))
-            // Might save the Mux by ORing with MapperType[ROM]
-
             UpperROMBank[0] = ROMBankID[0] ||
                               (
                                    !ROMBankID[8:1] // 0 becomes 1
                                 && !MapperType[MBC5] // except MBC5 actually gives 0
                               );
-            // One logic level from root
             UpperROMBank[4:1] = (ROMBankID[4:1] & ROMBankMask[4:1]);
             // In total, each bit depends on:
             // MapperType[MBC1], BankingMode, RAMBankID, ROMBankMask, ROMBankID, ROMBankMask
@@ -329,15 +322,13 @@ module GBCMapper
             begin
                 UpperROMBank[8:5] = ROMBankID[8:5] & ROMBankMask[8:5];
             end
-            
+
             LowerROMBank[4:0] = '0;
             // MBC1 advanced mode with large ROM, switch the lower bank on the RAM bank register.
             // Other mappers:  lower bank is 0.
             LowerROMBank[6:5] = (BankingMode && ROMBankMask[5]) ? RAMBankID[1:0] : '0;
             LowerROMBank[8:7] = '0;
-            
-            // Mux into a 2-output 6-LUT (two 2-LUT), or 1 5-LUT per bit.
-            // Logic depth 2 is still our critical path.
+
             RAMBank = ((BankingMode && !ROMBankMask[5]) || !MapperType[MBC1])
                       ? RAMBankID & RAMBankMask // Anything not MBC1 with RAM banking off
                       : '0; // MBC1 if RAM banking off
@@ -346,6 +337,7 @@ module GBCMapper
             // ROM is just the lower 15 bits of the address
             LowerROMBank = '0;
             UpperROMBank = '1;
+            RAMBank = '0;
         end
         // Mappers beyond MBC5 are highly specialized and not supported.
         // MBC6 is only one game; MBC7 has accelerometers.
