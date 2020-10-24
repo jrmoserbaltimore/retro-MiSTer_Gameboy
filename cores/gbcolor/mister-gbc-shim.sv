@@ -22,18 +22,18 @@ module RetroCoreShim
 )
 (
     // The console sends a core system clock (e.g. 200MHz) to produce the reference clock.
-    ISysCon SysCon, // Core system clock
+    ISysCon SysCon, // Core system clock is exactly 2^23 Hz
 
     // DDR System RAM or other large RAM.
 
     IWishbone.Initiator MainRAM,
     // DDR, HyperRAM, or SRAM on the expansion bus
     IWishbone.Initiator ExpansionRAM0,
-    IWishbone.Initiator ExpansionRAM1,
-    IWishbone.Initiator ExpansionRAM2,
+    //IWishbone.Initiator ExpansionRAM1,
+    //IWishbone.Initiator ExpansionRAM2,
 
-    output logic [23:0] Video,
-    output logic [23:0] Audio, // 96kHz 24-bit, downsample to 48kHz 16-bit
+    IWishbone.Initiator VideoOut,
+    IWishbone.Initiator AudioOut, // 96kHz 24-bit, downsample to 48kHz 16-bit
     // ================
     // = External Bus =
     // ================
@@ -42,10 +42,6 @@ module RetroCoreShim
     output logic CartridgeClk,
 //    input logic [68:0] CartridgeIn,
 //    output logic [68:0] CartridgeOut,
-
-    // Controller I/O, from µC
-    input logic ControllerIn,
-    output logic ControllerOut,
 
     // Expansion
     input logic [31:0] ExpansionPortIn,
@@ -56,8 +52,12 @@ module RetroCoreShim
 );
 
     wire Delay;
-    wire Reset;
-    wire Ce;
+    logic Ce;
+    logic GB2x; // placeholder
+    logic [6:1] Interrupt; // Placeholder
+    
+    wire [1:0] JoypadID;
+    wire [7:0] Keys;
     
     wire Read, Write;
     wire [15:0] Address;
@@ -65,37 +65,31 @@ module RetroCoreShim
     wire AudioIn;
     wire CS, Ready, DataReady;
 
-    wire CartDelay;
-    wire MainRAMDelay;
-    wire VRAMDelay;
-    
     // The cartridge controller needs to always provide both Ready and DataReady unless waiting
     // for operations.  These may frequently fall between clock ticks.  When using a hardware
     // cartridge, both of these should be kept on.
     assign Delay = ~(Ready & DataReady);
 
-    // ======================
-    // = System RAM Objects =
-    // ======================
-    // We create BRAMs in the shim so a different shim can use the GBC Cartridge Controller without
-    // dedicating the BRAM exclusively to the GBC when not running.
-    IWishbone
-    #(
-        .AddressWidth(15),
-        .DataWidth(8) 
-    ) IGBSystemRAM();
-
-    //(* dont_touch = "true" *)
-    WishboneBRAM
-    #(
-        .AddressWidth(15),
-        .DataWidth(8),
-        .DeviceType(DeviceType)
-    ) GBSystemRAM
-    (
+    // ========
+    // = CATC =
+    // ========
+    // When stalling during a tick, CATC buffers the tick
+    /*
+    RetroCATC CATC(
         .SysCon(SysCon),
-        .Initiator(IGBSystemRAM.Target)
+        .Stall(Delay),
+        .ClkEn(ClkEn),
+        .ClkEnOut(Ce)
     );
+    */
+
+
+
+    // ================
+    // = Video Device =
+    // ================
+    
+    wire [2:0] VideoStatus;
 
     IWishbone
     #(
@@ -103,7 +97,6 @@ module RetroCoreShim
         .DataWidth(8) 
     ) IGBVideoRAM();
 
-    //(* dont_touch = "true" *)
     WishboneBRAM
     #(
         .AddressWidth(14),
@@ -114,41 +107,67 @@ module RetroCoreShim
         .SysCon(SysCon),
         .Initiator(IGBVideoRAM.Target)
     );
-    
+
     IWishbone
     #(
-        .AddressWidth(17),
-        .DataWidth(8) 
-    ) IGBCartridgeRAM();
-
-    //(* dont_touch = "true" *)
-    WishboneBRAM
-    #(
-        .AddressWidth(17),
+        .AddressWidth(14),
         .DataWidth(8),
-        .DeviceType(DeviceType)
-    ) GBCartridgeRAM
+        .TGAWidth(2),
+        .TGDWidth(1) 
+    ) IGBVideoPU();
+    
+    GBCVideoPU VideoPU
     (
         .SysCon(SysCon),
-        .Initiator(IGBCartridgeRAM.Target)
+        .ClkEn(Ce),
+        .VideoRAM(IGBVideoRAM),
+        .VideoOut(VideoOut),
+        .VideoStatus(VideoStatus),
+        .SystemBus(IGBVideoPU.Target)
     );
-    // TODO:  Chunk of BRAM for cartridge cache
-    // TODO:  Chunk of BRAM for mappers
 
-    // ========
-    // = CATC =
-    // ========
-    // Cartridge controller triggers Delay if data isn't ready
-    /*
-    RetroCATC CATC(
-        .Clk(CoreClk),
-        .Delay(Delay),
-        .ClkEn(ClkEn),
-        .Reset(Reset),
-        .ClkEnOut(Ce)
+    // ===============
+    // = I/O Devices =
+    // ===============
+    
+    logic SerialClkIn;
+    logic SerialClkOut;
+    logic SerialIn;
+    logic SerialOut;
+    logic IRIn;
+    logic IROut;
+ 
+    IWishbone
+    #(
+        .AddressWidth(16),
+        .DataWidth(8)
+    )
+    IRTC();
+    // FIXME:  Get an actual RTC object
+
+    IWishbone
+    #(
+        .AddressWidth(8),
+        .DataWidth(8) 
+    ) IIOSystem();
+
+    GBCIOSystem IOBus
+    (
+        .SysCon(SysCon),
+        .Ce(Ce),
+        .GB2x(GB2x),
+        .JoypadID(JoypadID),
+        .Keys(Keys),
+        .SerialClkIn(SerialClkIn),
+        .SerialClkOut(SerialClkOut),
+        .SerialIn(SerialIn),
+        .SerialOut(SerialOut),
+        .IRIn(IRIn),
+        .IROut(IROut),
+        .IOBus(AudioOut),
+        .Interrupt(Interrupt[4:2]),
+        .SystemBus(IIOSystem.Target)
     );
-    */
-
     // =================================
     // = Interface to hardware GamePak =
     // =================================
@@ -166,35 +185,36 @@ module RetroCoreShim
     );
     */
 
-    // ========================
-    // = Interface to GamePak =
-    // ========================
-
-    IWishbone
-    #(
-        .AddressWidth(16),
-        .DataWidth(8)
-    )
-    ISystemBus();
-
-    IWishbone
-    #(
-        .AddressWidth(16),
-        .DataWidth(8)
-    )
-    IRTC();
-    // FIXME:  Hastily-assembled stuff to get this to actually synthesize
+    // =======================
+    // = Interface to Mapper =
+    // =======================
     
+    IWishbone
+    #(
+        .AddressWidth(17),
+        .DataWidth(8) 
+    ) IGBCartridgeRAM();
+
+    WishboneBRAM
+    #(
+        .AddressWidth(17),
+        .DataWidth(8),
+        .DeviceType(DeviceType)
+    ) GBCartridgeRAM
+    (
+        .SysCon(SysCon),
+        .Initiator(IGBCartridgeRAM.Target)
+    );
+
     IWishbone
     #(
         .AddressWidth(23),
         .DataWidth(8) 
     ) ILoadImage();
 
-    // XXX:  Need to instantiate a cache here, not an 8MB BRAM
-    //(* dont_touch = "true" *)
+    // FIXME:  Need to instantiate a cache here, not an 8MB BRAM
     /*
-    WishboneBRAM
+    WishboneCache
     #(
         .AddressWidth(23),
         .DataWidth(8),
@@ -205,6 +225,7 @@ module RetroCoreShim
         .Initiator(ILoadImage.Target)
     );
     */
+
     IWishbone
     #(
         .AddressWidth(16),
@@ -212,7 +233,6 @@ module RetroCoreShim
     )
     IMapper();
 
-    //(* dont_touch = "true" *)
     GBCMapper Mapper
     (
         .SysCon(SysCon),
@@ -223,16 +243,49 @@ module RetroCoreShim
         .MemoryBus(IMapper.Target)
     );
 
-    //(* dont_touch = "true" *)
+    // ======================
+    // = System RAM Objects =
+    // ======================
+    // We create BRAMs in the shim so a different shim can use the GBC Cartridge Controller without
+    // dedicating the BRAM exclusively to the GBC when not running.
+    IWishbone
+    #(
+        .AddressWidth(15),
+        .DataWidth(8) 
+    ) IGBSystemRAM();
+
+    WishboneBRAM
+    #(
+        .AddressWidth(15),
+        .DataWidth(8),
+        .DeviceType(DeviceType)
+    ) GBSystemRAM
+    (
+        .SysCon(SysCon),
+        .Initiator(IGBSystemRAM.Target)
+    );
+
+    // ==============
+    // = System Bus =
+    // ==============
+
+    IWishbone
+    #(
+        .AddressWidth(16),
+        .DataWidth(8)
+    )
+    ISystemBus();
+
     GBCMemoryBus SystemBus
     (
         .SysCon(SysCon),
         // System and video BRAMs
         .SystemRAM(IGBSystemRAM.Initiator),
-        .VideoRAM(IGBVideoRAM.Initiator),
-        .VideoStatus(3'b000),
-        .Cartridge(IMapper.Initiator),
-        .MemoryBus(Host) // Placeholder 
+        .VideoRAM(IGBVideoPU.Initiator),
+        .VideoStatus(VideoStatus),
+        .IOSystem(IIOSystem.Initiator),
+        .Cartridge(IMapper.Initiator), // FIXME: Find a way to swap out to cartridge
+        .MemoryBus(Host) // Placeholder; tie to Z80 instead 
     );
 
     logic [15:0] addrct;

@@ -68,10 +68,10 @@
 //     - $FE00-$FE9F (OAM)
 //     - Registers FF40-FF45, FF47-FF4B
 //     - CGB Registers FF68-FF6C
-//   - Sound
-//     - Sound Channel Registers FF10-14, FF16-FF1E, FF20-FF26
-//     - Waveform Register FF30-3F
-//   - I/O [XXX:  Just make this one Wishbone bus? with 4 address spaces? Combine with sound?]
+//   - I/O
+//     - Sound/APU
+//       - Sound Channel Registers FF10-14, FF16-FF1E, FF20-FF26
+//       - Waveform Register FF30-3F  
 //     - FF00 (Joypad)
 //     - FF01-FF02 (Serial I/O)
 //     - FF04-FF07 (Timer)
@@ -118,20 +118,9 @@ module GBCMemoryBus
     input logic [2:0] VideoStatus, // from FF41, read-only
     // Cartridge controller
     IWishbone.Initiator Cartridge,
-    
-    // Wishbone bus for joypad is overkill:  it's one register and no timing concerns
-    //input logic [5:0] JoypadIn,
-    //output logic [5:4] JoypadOut,
-    
-    // Same is true of the IR port (ff56)
-    // 2:  Read data (Bit 1, read-only)
-    // 1:  Write data (Bit 0)
-    // 0:  Data read enable (Bits 6-7)
-    //input logic [2:0] IRIn,  
-    //output logic [1:0] IROut,
-    
-    //IWishbone.Initiator AudioPU,
-    // TODO:  serial, timer/divider??
+
+    // misc simple things
+    IWishbone.Initiator IOSystem,
     
     // System bus it exposes
     // Communication to main system via TGC.  System can call for boot from ROM, and controller can
@@ -141,19 +130,21 @@ module GBCMemoryBus
 
     // Upper RAM and I/O registers
     logic [7:0] HRAM ['h00:'hff];
+    logic [7:0] RetroRegs ['ha0:'ha7];
     //assign HRAM['h41][2:0] = VideoStatus; // read-only video registers
     // Banks
     wire VRAMBank = HRAM['h4f][0];
     wire [2:0] WRAMBank = (HRAM['h70][2:0] | (3'b001 &  ~|HRAM['h70][2:0]));
     // DMA
-    wire [7:0] OAMDMA = HRAM['h46];
+    logic [7:0] OAMDMA;
     wire [15:0] HDMASource = {HRAM['h51], HRAM['h52][7:4], '0};
     wire [12:0] HDMADest = {HRAM['h53], HRAM['h54][7:4], '0};
     wire [6:0] HDMALength = HRAM['h55][6:0];
     wire HDMAMode = HRAM['h55][7];
     // Close out the boot ROM if this is != 0
     wire InitCycle = !HRAM['h50];
-    wire IsCGB = HRAM['ha7][0];
+    
+    wire IsCGB = RetroRegs['ha7][0];
 
     wire AddressOAM = MemoryBus.ADDR[15:8] == 'hfe
                      && MemoryBus.ADDR[7:5] != 'b101 // 0xa
@@ -231,22 +222,24 @@ module GBCMemoryBus
     wire DMAActive = DMACount != 'hff;
     logic HDMAActive;
 
-    // 'b01 - Cartridge
-    // 'b10 - Video
-    // 'b11 - WRAM    
-    logic [1:0] RequestOutstanding;
+    // 'b001 - Cartridge
+    // 'b010 - Video
+    // 'b011 - WRAM
+    // 'b100 - I/O   
+    logic [2:0] RequestOutstanding;
     
     // this is done with these wires because Vivado's simulator sees fs as 1 when all the inputs are 0.
     wire cs = Cartridge.Stalled();
     wire vs = VideoRAM.Stalled();
     wire ss = SystemRAM.Stalled();
+    wire is = IOSystem.Stalled();
     wire dc = (DMAActive && !DMACycles);
     wire[14:0] OAMDMAWRAM={ OAMDMA[4] ? WRAMBank : 3'b000, OAMDMA[3:0], 8'b0} | {7'b0, DMACount - 1 };
     //wire fs = Cartridge.Stalled() || VideoRAM.Stalled() || SystemRAM.Stalled() || RequestOutstanding || (DMAActive && !DMACycles);
     //wire fs2 = cs || vs || ss || dc || RequestOutstanding;
     
     // Stalls are to keep the game boy in sync
-    assign MemoryBus.ForceStall = cs || vs || ss || dc || RequestOutstanding;
+    assign MemoryBus.ForceStall = cs || vs || ss || is || dc || RequestOutstanding;
                            // Any bus stalled
                         //   Cartridge.Stalled() || VideoRAM.Stalled() || SystemRAM.Stalled()
                            // waiting on any request from any bus, stalled or not
@@ -263,6 +256,7 @@ module GBCMemoryBus
         Cartridge.Open();
         VideoRAM.Open();
         SystemRAM.Open();
+        IOSystem.Open();
         DMACount <= 'hff;
         HDMAActive <= '0;
         //HRAM <=  '{default:'0};
@@ -340,12 +334,12 @@ module GBCMemoryBus
 
         if (HDMAActive)
         begin
-            if (!HRAM['h55][7] || HRAM['h41][1:0] == 2'b00)
+            if (!HDMAMode || VideoStatus[1:0] == 'h0)
             begin
                 // Either general-purpose ($ff55[7]==0) or only during H-Blank
                 
                 // TODO:
-                //   - if it's time to do a transfer (LY-0-143, 
+                //   - if it's time to do a transfer (LY=0-143), 
                 //     - if counter == 0
                 //       - $ff55[7], set counter to 15
                 //     - else counter <= counter - 1
@@ -360,23 +354,34 @@ module GBCMemoryBus
 
         // Requests will not be outstanding when doing DMA (return garbage) or HDMA (RTY)
         case (RequestOutstanding)
-        'b01:
+        'h1:
             if (Cartridge.ResponseReady())
             begin
                 RequestOutstanding <= '0;
                 MemoryBus.SendResponse(Cartridge.GetResponse());
             end
-        'b10:
+        'h2:
             if (VideoRAM.ResponseReady())
             begin
                 RequestOutstanding <= '0;
                 MemoryBus.SendResponse(VideoRAM.GetResponse());
             end
-        'b11:
+        'h3:
             if (SystemRAM.ResponseReady())
             begin
                 RequestOutstanding <= '0;
                 MemoryBus.SendResponse(SystemRAM.GetResponse());
+            end
+        'h4:
+            if (IOSystem.ResponseReady())
+            begin
+                RequestOutstanding <= '0;
+                MemoryBus.SendResponse(IOSystem.GetResponse());
+            end
+        default:  // This is an error.  Just do something stupid.
+            begin
+                RequestOutstanding <= '0;
+                MemoryBus.SendResponse('hff);
             end
         endcase        
         if (!MemoryBus.Stalled() && MemoryBus.RequestReady())
@@ -405,10 +410,10 @@ module GBCMemoryBus
                 if (AddressCartridge)
                 begin
                     if (MemoryBus.WE)
-                        Cartridge.SendData(MemoryBus.ADDR, MemoryBus.DAT_ToTarget);
+                        Cartridge.SendData(MemoryBus.ADDR, MemoryBus.GetRequest());
                     else
                         Cartridge.RequestData(MemoryBus.ADDR);
-                    RequestOutstanding <= 2'b01;
+                    RequestOutstanding <= 'h1;
                 end
 
                 // $8000-$9fff
@@ -416,10 +421,10 @@ module GBCMemoryBus
                 begin
                     // 14-bit address space addresses two banks of 8192
                     if (MemoryBus.WE)
-                        VideoRAM.SendData({VRAMBank, MemoryBus.ADDR[12:0]}, MemoryBus.DAT_ToTarget);
+                        VideoRAM.SendData({VRAMBank, MemoryBus.ADDR[12:0]}, MemoryBus.GetRequest());
                     else
                         VideoRAM.RequestData({VRAMBank, MemoryBus.ADDR[12:0]});
-                    RequestOutstanding <= 2'b10;
+                    RequestOutstanding <= 'h2;
                 end
 
                 // $a000-$bfff:  Cartridge, above
@@ -427,10 +432,10 @@ module GBCMemoryBus
                 if (AddressWRAM || AddressEcho)
                 begin
                     if (MemoryBus.WE)
-                        SystemRAM.SendData(WRAMAddress, MemoryBus.DAT_ToTarget);
+                        SystemRAM.SendData(WRAMAddress, MemoryBus.GetRequest());
                     else
                         SystemRAM.RequestData(WRAMAddress);
-                    RequestOutstanding <= 2'b11;
+                    RequestOutstanding <= 'h3;
                 end
 
                 // $fe00-$fe9f
@@ -438,64 +443,61 @@ module GBCMemoryBus
                 begin
                     // TGA address tag is OAM ('b01)
                     if (MemoryBus.WE)
-                        VideoRAM.SendData({6'b0, MemoryBus.ADDR[7:0]}, MemoryBus.DAT_ToTarget,,2'b01);
+                        VideoRAM.SendData({6'b0, MemoryBus.ADDR[7:0]}, MemoryBus.GetRequest(),,2'b01);
                     else
                         VideoRAM.RequestData({6'b0, MemoryBus.ADDR[7:0]},,,2'b01);
-                    RequestOutstanding <= 2'b10;
+                    RequestOutstanding <= 'h2;
                 end
 
-                // $fea0-$fea6:  Cartridge, above
-
-                // $fea7-$feff
-                // Just toss random data out
-                if (AddressRetroRegs && !AddressCartridge)
+                // $fea0-$feff
+                if (AddressRetroRegs)
                 begin
-                    case (MemoryBus.ADDR[7:0])
-                    'ha0, 'ha1, 'ha2, 'ha3, 'ha4, 'ha5, 'ha6:
-                        begin
-                            if (MemoryBus.WE && InitCycle)
-                                Cartridge.SendData(MemoryBus.ADDR, MemoryBus.DAT_ToTarget);
-                            else
-                                Cartridge.RequestData(MemoryBus.ADDR);
-                            RequestOutstanding <= 2'b01;
-                        end
-                    'ha7:
-                        begin
-
-                        end
-                    default:
-                        MemoryBus.SendResponse(8'hff);
-                    endcase
+                    if (MemoryBus.WE && InitCycle)
+                    begin
+                        // In any case, store writes in our internal registers
+                        case (MemoryBus.ADDR[7:0])
+                        'ha0, 'ha1, 'ha2, 'ha3, 'ha4, 'ha5, 'ha6:
+                            begin
+                                Cartridge.SendData(MemoryBus.ADDR, MemoryBus.GetRequest());
+                                RequestOutstanding <= 'h1;
+                                RetroRegs[MemoryBus.ADDR[7:0]] <= MemoryBus.GetRequest();
+                            end
+                        'ha7:
+                            begin
+                                // Store locally
+                                RetroRegs[MemoryBus.ADDR[7:0]] <= MemoryBus.GetRequest();
+                                MemoryBus.SendResponse('h00);
+                            end
+                        // When not directed outside, just ack
+                        default: MemoryBus.SendResponse('h00);
+                        endcase
+                    end else // Reads come from our internal copy
+                        MemoryBus.SendResponse(MemoryBus.ADDR[7:0] > 'ha7
+                                             ? 'h00
+                                             : RetroRegs[MemoryBus.ADDR[7:0]]);
                 end
 
                 // $ff00-$ffff
                 // IO and HRAM access works during DMA but not HDMA
                 if (AddressIOHRAM)
                 begin
-                    // Always set
                     if (MemoryBus.WE) HRAM[MemoryBus.ADDR[7:0]] <= MemoryBus.GetRequest();
                     // Always ACK on HRAM access
                     if (MemoryBus.ADDR[7])
                     begin
                         MemoryBus.SendResponse(HRAM[MemoryBus.ADDR[7:0]]);
-                        //if (MemoryBus.WE) HRAM[MemoryBus.ADDR[7:0]] <= MemoryBus.GetRequest();
                     end else
                     begin // I/O access
                         case (MemoryBus.ADDR[6:0])
-                            //'h00: // Joypad
-                            //begin
-                            //    if (MemoryBus.WE) JoypadOut = MemoryBus.DAT_ToTarget[5:4];
-                            //    MemoryBus.SendResponse({2'b00, JoypadIn});
-                            //end
                             'h46: // OAM DMA
                             begin
                                 if (MemoryBus.WE)
                                 begin
                                     DMACount <= 160;
                                     DMACycles <= 160;
-                                    //HRAM[MemoryBus.ADDR[7:0]] <= MemoryBus.GetRequest();
+                                    OAMDMA <= MemoryBus.GetRequest();
                                 end
-                                MemoryBus.SendResponse(HRAM[MemoryBus.ADDR[7:0]]);
+                                MemoryBus.SendResponse(OAMDMA);
                             end
                             // Registers FF40-FF45, FF47-FF4B
                             // CGB Registers FF68-FF6C
@@ -528,22 +530,31 @@ module GBCMemoryBus
                             begin
                                 HRAM['h50] <= HRAM['h50] ? HRAM['h50] : MemoryBus.GetRequest();
                             end
-                            /*
+                            //   - I/O
+                            'h00, // Joypad
+                            'h01, 'h02, // Serial I/O
+                            // APU
+                            'h04, 'h05, 'h06, 'h07, // Timer
+                            'h10, 'h11, 'h12, 'h13, 'h14, // Pulse 1
+                                  'h16, 'h17, 'h18, 'h19, // Pulse 2
+                            'h1a, 'h1b, 'h1c, 'h1d, 'h1e, // Digital Wave
+                            'h20, 'h21, 'h22, 'h23, // Noise
+                            'h24, 'h25, 'h26, // APU control
+                            'h30, 'h31, 'h32, 'h33, 'h34, 'h35, 'h36, 'h37, // Waveform RAM
+                            'h38, 'h39, 'h3a, 'h3b, 'h3c, 'h3d, 'h3e, 'h3f,
                             'h56:  // CGB IR port
                             begin
-                                // 2:  Read data (Bit 1, read-only)
-                                // 1:  Write data (Bit 0)
-                                // 0:  Data read enable (Bits 6-7)
+                                // Address space is registers TGA='b10
                                 if (MemoryBus.WE)
-                                    IROut <= {MemoryBus.ADDR[0], &MemoryBus.ADDR[7:6]};
-                                MemoryBus.SendResponse({IRIn[0], IRIn[0], // Data read enable
-                                                        4'b0000, // Empty
-                                                        IRIn[2], IRIn[1]}); // Read/write bits
+                                    IOSystem.SendData(MemoryBus.ADDR[7:0], MemoryBus.GetRequest());
+                                else
+                                    IOSystem.RequestData(MemoryBus.ADDR[7:0]);
+                                RequestOutstanding <= 'h4;
                             end
-                            */
+
                             default: // Send garbage
                             begin
-                                MemoryBus.SendResponse('hff); //(HRAM[MemoryBus.ADDR[7:0]] | 'h80);
+                                MemoryBus.SendResponse('hff);
                             end
                         endcase
                     end
