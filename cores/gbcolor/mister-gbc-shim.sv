@@ -14,7 +14,8 @@
 //   - DMG:  CPU A register == 0x01 (also SGB)
 //   - MGB:  CPU A register == 0xff (Gameboy Pocket, SGB2)
 //   - CGB:  CPU A register == 0x11, B[0] == 0
-//   - GBA:  CPU A register == 0x11, B[0] == 1 
+//   - GBA:  CPU A register == 0x11, B[0] == 1
+
 module RetroCoreShim
 #(
     parameter DeviceType = "Xilinx",
@@ -44,8 +45,8 @@ module RetroCoreShim
 //    output logic [68:0] CartridgeOut,
 
     // Expansion
-    input logic [31:0] ExpansionPortIn,
-    output logic [31:0] ExpansionPortOut,
+    input logic [31:1] ExpansionPortIn,
+    output logic [31:1] ExpansionPortOut,
 
     // Console
     IWishbone.Target Host

@@ -58,7 +58,7 @@ module GBCAudio
         input logic [5:0] SoundLength, // $ff16 and $ff11 bits 5-0
         input logic [3:0] InitialVolume, // $ff17 and $ff12 bits 7-4
         input logic EnvelopeDirection, // $ff17 and $ff12 bit 3
-        input logic EnvelopeSweep, // $ff17 and $ff12 bits 2-0
+        input logic [2:0] EnvelopeSweep, // $ff17 and $ff12 bits 2-0
         input logic [10:0] Frequency, // $ff19 2-0 and $ff18 ($ff14 and $ff13, respectively)
         input logic Counter, // $ff19 and $ff14 bit 6
         input logic Restart, // $ff19 and $ff14 bit 7
@@ -114,7 +114,7 @@ module GBCAudio
         .InitialVolume(Pulse2Registers['h17][7:4]),
         .EnvelopeDirection(Pulse2Registers['h17][3]),
         .EnvelopeSweep(Pulse2Registers['h17][2:0]),
-        .Frequency({Pulse2Registers['h19][2:0], Pulse1Registers['h18]}),
+        .Frequency({Pulse2Registers['h19][2:0], Pulse2Registers['h18]}),
         .Counter(Pulse2Registers['h19][6]),
         .Restart(Pulse2Registers['h19][7])
     );
