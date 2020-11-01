@@ -15,6 +15,21 @@
 //   - MGB:  CPU A register == 0xff (Gameboy Pocket, SGB2)
 //   - CGB:  CPU A register == 0x11, B[0] == 0
 //   - GBA:  CPU A register == 0x11, B[0] == 1
+//
+// Host controls:
+//  - Pause (disables CE)
+//  - Reset (propagates through Game Boy SysCon)
+//  - Load boot ROM
+//  - Read WRAM
+//  - Write WRAM (for enhanced boot ROM)
+//  - Read VRAM
+//  - Write VRAM
+//  - Read Cartridge RAM (for saving)
+//  - Write Cartridge RAM (for loading)
+//  - Address bus read
+//  - Address bus write
+//  - Read registers (Save state)
+//  - Write registers (Load state)
 
 module RetroCoreShim
 #(
@@ -52,11 +67,13 @@ module RetroCoreShim
     IWishbone.Target Host
 );
 
-    wire Delay;
+    logic IsPaused;
     logic Ce;
     logic GB2x; // placeholder
     logic [6:1] Interrupt; // Placeholder
-    
+
+    logic GBReset;
+
     wire [1:0] JoypadID;
     wire [7:0] Keys;
     
@@ -69,22 +86,11 @@ module RetroCoreShim
     // The cartridge controller needs to always provide both Ready and DataReady unless waiting
     // for operations.  These may frequently fall between clock ticks.  When using a hardware
     // cartridge, both of these should be kept on.
-    assign Delay = ~(Ready & DataReady);
+    //assign Delay = ~(Ready & DataReady);
 
-    // ========
-    // = CATC =
-    // ========
-    // When stalling during a tick, CATC buffers the tick
-    /*
-    RetroCATC CATC(
-        .SysCon(SysCon),
-        .Stall(Delay),
-        .ClkEn(ClkEn),
-        .ClkEnOut(Ce)
-    );
-    */
-
-
+    ISysCon GBSysCon();
+    assign GBSysCon.CLK = SysCon.CLK;
+    assign GBSysCon.RST = SysCon.RST | GBReset;
 
     // ================
     // = Video Device =
@@ -276,7 +282,41 @@ module RetroCoreShim
         .DataWidth(8)
     )
     ISystemBus();
+    
+    IWishbone
+    #(
+        .AddressWidth(16),
+        .DataWidth(8)
+    )
+    ISystemBusSkid();
 
+    WishboneSkidBuffer
+    #(
+        .AddressWidth(16),
+        .DataWidth(8)
+    )
+    SystemBusSkid
+    (
+        .SysCon(SysCon),
+        .Initiator(ISystemBus.Target),
+        .Target(ISystemBusSkid.Initiator)
+    );
+    // ========
+    // = CATC =
+    // ========
+    // When stalling during a tick, CATC buffers the tick
+
+    RetroCATC
+    #(
+        .ReferenceClock(2**23)
+    ) CATC
+    (
+        .SysCon(SysCon),
+        .Stall(ISystemBus.Stalled()),
+        .ClkEn(!IsPaused),
+        .ClkEnOut(Ce)
+    );
+    
     GBCMemoryBus SystemBus
     (
         .SysCon(SysCon),
@@ -286,9 +326,50 @@ module RetroCoreShim
         .VideoStatus(VideoStatus),
         .IOSystem(IIOSystem.Initiator),
         .Cartridge(IMapper.Initiator), // FIXME: Find a way to swap out to cartridge
-        .MemoryBus(Host) // Placeholder; tie to Z80 instead 
+        .MemoryBus(ISystemBusSkid.Target) // Skid buffer 
     );
 
+    // XXX:  Hack to make it synthesize for testing and LUT count.
+    logic irq; // FIXME:  Hook up to IRQ
+    logic m1_n, mreq_n, iorq_n, rd_n, wr_n, rfsh_n, halt_n, busak_n;
+    wire [7:0] cpu_di, cpu_do;
+    wire [15:0] cpu_addr;
+    assign ISystemBus.CYC = 1'b1;
+    assign ISystemBus.STB = !rd_n||!wr_n||!mreq_n; // read/write/request?  is !mreq_n just stb? 
+    assign ISystemBus.ADDR = cpu_addr;
+    assign ISystemBus.DAT_ToTarget = cpu_do;
+    assign ISystemBus.WE = !wr_n;
+    assign cpu_di = ISystemBus.DAT_ToInitiator;
+
+    // =======
+    // = CPU =
+    // =======
+
+    tv80s CPU
+    (
+        .reset_n(!SysCon.RST),
+        .clk(SysCon.CLK),
+        .cen(Ce),
+        // XXX:  is this sufficient?  Wait until receiving an ack?
+        .wait_n(!ISystemBus.ACK),
+        .int_n(!irq),
+        .nmi_n(1'b1), // No NMI
+        .busrq_n(1'b1), // no bus requests
+        // Outputs
+        .m1_n(m1_n),
+        .mreq_n(mreq_n),
+        .iorq_n(iorq_n),
+        .rd_n(rd_n),
+        .wr_n(wr_n),
+        .rfsh_n(rfsh_n),
+        .halt_n(halt_n),
+        .busak_n(busak_n),
+        .A(cpu_addr),
+        .di(cpu_di),
+        .dout(cpu_do)
+        // stop:  stop (output)
+    );
+    
     logic [15:0] addrct;
     
     always_ff @(posedge SysCon.CLK)

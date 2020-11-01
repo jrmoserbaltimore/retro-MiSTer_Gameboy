@@ -25,7 +25,7 @@
     <Option Name="SimulatorInstallDirRiviera" Val=""/>
     <Option Name="SimulatorInstallDirActiveHdl" Val=""/>
     <Option Name="SimulatorLanguage" Val="Verilog"/>
-    <Option Name="BoardPart" Val=""/>
+    <Option Name="BoardPart" Val="qmtech:xc7a100t-starter-kit:part0:1.0"/>
     <Option Name="BoardPartRepoPaths" Val="$PPRDIR/../../../../../AppData/Roaming/Xilinx/Vivado/2019.2/xhub/board_store"/>
     <Option Name="SourceMgmtMode" Val="DisplayOnly"/>
     <Option Name="ActiveSimSet" Val="System_Bus_Simulation"/>
@@ -217,12 +217,6 @@
           <Attr Name="UsedIn" Val="implementation"/>
         </FileInfo>
       </File>
-      <File Path="$PPRDIR/retro/Retro-1.sources/example-core-shim.sv">
-        <FileInfo>
-          <Attr Name="Library" Val="mst_retro1"/>
-          <Attr Name="UserDisabled" Val="1"/>
-        </FileInfo>
-      </File>
       <File Path="$PPRDIR/cores/gbcolor/io-bus.sv">
         <FileInfo>
           <Attr Name="UsedIn" Val="synthesis"/>
@@ -232,6 +226,22 @@
       </File>
       <File Path="$PPRDIR/cores/gbcolor/gb-apu.sv">
         <FileInfo>
+          <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="implementation"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
+      <File Path="$PPRDIR/retro/rtl/filters/video/sai.sv">
+        <FileInfo>
+          <Attr Name="Library" Val="mst_retro1"/>
+          <Attr Name="UsedIn" Val="synthesis"/>
+          <Attr Name="UsedIn" Val="implementation"/>
+          <Attr Name="UsedIn" Val="simulation"/>
+        </FileInfo>
+      </File>
+      <File Path="$PPRDIR/retro/rtl/filters/video/eagle.sv">
+        <FileInfo>
+          <Attr Name="Library" Val="mst_retro1"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>
           <Attr Name="UsedIn" Val="simulation"/>
@@ -385,12 +395,12 @@
         <StratHandle Name="Flow_PerfOptimized_high" Flow="Vivado Synthesis 2020"/>
         <Step Id="synth_design">
           <Option Id="ResourceSharing">2</Option>
+          <Option Id="GatedClockConversion">2</Option>
           <Option Id="Directive">7</Option>
           <Option Id="ShregMinSize">5</Option>
-          <Option Id="NoCombineLuts">1</Option>
-          <Option Id="KeepEquivalentRegisters">1</Option>
           <Option Id="FsmExtraction">1</Option>
-          <Option Id="GatedClockConversion">2</Option>
+          <Option Id="KeepEquivalentRegisters">1</Option>
+          <Option Id="NoCombineLuts">1</Option>
         </Step>
       </Strategy>
       <GeneratedRun Dir="$PRUNDIR" File="gen_run.xml"/>
@@ -414,9 +424,9 @@
           <Option Id="ResourceSharing">2</Option>
           <Option Id="Directive">7</Option>
           <Option Id="ShregMinSize">5</Option>
-          <Option Id="NoCombineLuts">1</Option>
-          <Option Id="KeepEquivalentRegisters">1</Option>
           <Option Id="FsmExtraction">1</Option>
+          <Option Id="KeepEquivalentRegisters">1</Option>
+          <Option Id="NoCombineLuts">1</Option>
         </Step>
       </Strategy>
       <GeneratedRun Dir="$PRUNDIR" File="gen_run.xml"/>
@@ -494,7 +504,9 @@
       <RQSFiles/>
     </Run>
   </Runs>
-  <Board/>
+  <Board>
+    <Jumpers/>
+  </Board>
   <DashboardSummary Version="1" Minor="0">
     <Dashboards>
       <Dashboard Name="default_dashboard">
